@@ -1,6 +1,6 @@
 # sdr-bootcamp
 This repository contains all the _skills_ required to cook up stuff using the Analog Devices' ADALM-PLUTO SDR. 
-Please read documentation properly, and everything we say is 100% serious. (Trust me bro)
+Please read documentation properly (`SDR_Manual_v1.pdf`), and everything we say is 100% serious. (Trust me bro)
 
 Links to some related repos:
 
