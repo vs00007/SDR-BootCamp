@@ -1,0 +1,371 @@
+\twocolumn
+\chapter{USRP X310 in MATLAB}
+\ChapterCredits{
+    Prabhat Kukunuri,
+    Varun Shakunaveti,
+    Anantha Krishnan
+}
+
+\section{Overview}
+
+The Universal Software Radio Peripheral (USRP) X310, developed by Ettus Research,
+is a reconfigurable software-defined radio (SDR) platform designed for real-time
+signal processing and high-bandwidth wireless communication experimentation. Its
+FPGA-based design, support for wideband radios, and compatibility with
+open-source tools make it especially suitable for cognitive radio, MIMO systems,
+and radar research.
+
+By integrating flexible RF modules, the system can cover a wide frequency range
+and adapt to diverse wireless standards. The X310 architecture enables
+high-speed streaming through 10~Gigabit Ethernet, supporting low-latency
+data transfer for demanding research applications.
+
+\section{Hardware Architecture}
+
+The core of the X310 is the Xilinx Kintex-7 FPGA, which performs computationally
+intensive baseband operations such as filtering, modulation, and timing
+synchronization. The system supports dual RF daughterboards with independent
+transmit and receive chains.
+
+Key hardware components include:
+\begin{itemize}
+    \item Xilinx Kintex-7 (XC7K410T) FPGA
+    \item Dual DACs (16-bit) and dual ADCs (14-bit)
+    \item 10~Gigabit Ethernet and PCIe~x4 host interfaces
+    \item GPSDO / external reference timing support
+\end{itemize}
+
+\section{Software Stack and UHD Integration}
+
+The USRP Hardware Driver (UHD) provides the primary software interface to the
+USRP X310. UHD exposes a unified API for configuration, streaming, tuning, gain
+control, and synchronization, and integrates with several higher-level tools:
+\begin{itemize}
+    \item GNU Radio
+    \item MATLAB/Simulink
+    \item C/C++ and Python-based applications
+\end{itemize}
+
+In the experiments described in this chapter, UHD is accessed primarily through
+MATLAB support packages, which internally rely on UHD for device discovery,
+streaming, and control.
+
+\section{Host and Network Setup}
+
+This section describes the practical steps required to power, network, and
+probe the USRP X310 from a host machine.
+
+\subsection*{Power and Basic Connectivity}
+
+\begin{enumerate}
+    \item Connect the power supply to the USRP X310 and then to the AC mains.
+    \item Switch on the USRP using the front-panel power control (if available).
+    Status LEDs indicate power and initialization state.
+    \item On the host PC, configure the Ethernet interface to communicate with
+    the USRP via UHD. Select the Ethernet interface connected to the USRP and
+    change the IP assignment mode to \textbf{Manual} (or \textbf{Static}) with
+    the following IPv4 settings:
+    \begin{itemize}
+        \item IPv4 Address: \texttt{192.168.10.1}
+        \item Subnet Mask: \texttt{255.255.255.0}
+        \item Default Gateway: (leave blank or set to \texttt{0.0.0.0})
+    \end{itemize}
+    After applying these settings, the host and the USRP reside on the same
+    subnet. Basic connectivity can be verified by issuing a \texttt{ping}
+    command to the USRP’s default IP address:
+    \begin{lstlisting}
+ping 192.168.10.2
+    \end{lstlisting}
+    A representative successful output is:
+    {\footnotesize
+    \begin{lstlisting}
+Pinging 192.168.10.2 with 32 bytes of data:
+Reply from 192.168.10.2: bytes=32 time=1ms TTL=32
+Reply from 192.168.10.2: bytes=32 time=3ms TTL=32
+Reply from 192.168.10.2: bytes=32 time=3ms TTL=32
+Reply from 192.168.10.2: bytes=32 time=3ms TTL=32
+
+Ping statistics for 192.168.10.2:
+    Packets: Sent = 4, Received = 4, Lost = 0 (0% loss),
+Approximate round trip times in milli-seconds:
+    Minimum = 1ms, Maximum = 3ms, Average = 2ms
+    \end{lstlisting}
+    }
+    The absence of packet loss confirms that the network configuration is
+    correct and the device is reachable.
+    \item Use the UHD probing utility to confirm that the device and
+    daughterboards are correctly recognized:
+    \begin{lstlisting}
+uhd_usrp_probe --args="addr=192.168.10.2"
+    \end{lstlisting}
+    This command reports information such as device type, serial number,
+    installed daughterboards, clock sources, and available channels.
+\end{enumerate}
+
+\subsection*{Firmware and FPGA Image Update}
+
+For reliable operation, the USRP X310 should run a firmware and FPGA image
+version compatible with the installed UHD release. If a version mismatch is
+detected, UHD utilities can be used to update the images:
+
+\begin{enumerate}
+    \item Install the appropriate UHD version on the host PC.
+    \item Download or locate the device images (firmware and FPGA bitstreams)
+    distributed with UHD.
+    \item Use the image loading utility to program the X310:
+    {\footnotesize
+    \begin{lstlisting}
+uhd_image_loader --args="type=x300,addr=192.168.10.2"
+    \end{lstlisting}
+    }
+    \item After the image is successfully written, power-cycle the USRP X310.
+    \item Re-run \texttt{uhd\_usrp\_probe} to confirm that the device now
+    reports the expected image versions.
+\end{enumerate}
+
+\section{MATLAB Integration}
+
+This section focuses on the MATLAB software requirements and the specific radio
+interfaces used in the experiments.
+
+\subsection*{Required Toolboxes and Support Packages}
+
+To interface USRP radios such as the X310 from MATLAB and conduct SDR
+experiments, the following components are required:
+\begin{itemize}
+  \item MATLAB (base environment)
+  \item \textbf{Communications Toolbox} --- for modulation/demodulation, filters,
+        and baseband operations
+  \item \textbf{Signal Processing Toolbox} --- for DSP operations, filtering,
+        FFT, and spectral analysis
+  \item \textbf{DSP System Toolbox} --- for advanced DSP functions, streaming,
+        block-based systems, and real-time data handling
+  \item \textbf{Wireless Testbench Support Package for NI USRP Radios} ---
+        for X-series (X300 / X310 / X410) or N3xx-series USRPs
+\end{itemize}
+
+\subsection*{sdruTransmitter and sdruReceiver Interface}
+
+The \texttt{sdruTransmitter} and \texttt{sdruReceiver} System objects in MATLAB
+provide a legacy interface to USRP hardware for wireless baseband transmission
+and reception. These objects allow streaming of IQ sample frames between MATLAB
+and the USRP radio using the UHD driver.
+
+\subsubsection*{Overview of Transmitter and Receiver Objects}
+
+\begin{itemize}
+    \item \textbf{\texttt{sdruTransmitter}}: used to send complex baseband
+    samples from MATLAB to the USRP RF front-end. Key parameters include center
+    frequency, gain, interpolation factor, and channel mapping.
+    
+    \item \textbf{\texttt{sdruReceiver}}: used to capture IQ samples from the
+    USRP into MATLAB for processing. Important properties include center
+    frequency, gain, decimation factor, sample rate, and frame size.
+\end{itemize}
+
+Once configured, both objects operate using the \texttt{step()} function inside
+a streaming loop. The loop ensures continuous transmission or reception of
+frames until manually stopped.
+
+\subsubsection*{Example: Transmit and Receive IQ Frames}
+
+The following simple example illustrates the creation of transmitter and
+receiver objects, followed by a \texttt{for}-loop for real-time transmission and
+reception of signals:
+
+\begin{lstlisting}[language=MATLAB]
+% Create transmitter and receiver objects
+tx = sdruTransmitter('192.168.10.2', ...
+    'CenterFrequency', 2.4e9, ...
+    'Gain', 20);
+
+rx = sdruReceiver('192.168.10.2', ...
+    'CenterFrequency', 2.4e9, ...
+    'Gain', 15, ...
+    'SamplesPerFrame', 1024);
+
+% Generate a baseband test signal
+txSignal = exp(1j*2*pi*0.01*(0:1023)).';
+
+% Streaming loop
+for k = 1:100
+    % Transmit a frame
+    step(tx, txSignal);
+
+    % Receive a frame
+    rxSignal = step(rx);
+    
+    % Simple processing (e.g., display received energy)
+    disp(mean(abs(rxSignal).^2));
+end
+
+% Release radio objects
+release(tx);
+release(rx);
+\end{lstlisting}
+
+The transmit object must be called continuously inside the streaming loop;
+otherwise, the USRP will run out of samples and the transmission will stop due
+to a buffer underflow condition.
+
+In some cases, especially after power cycling the USRP or restarting MATLAB, it
+is necessary to reload the FPGA image on the USRP X310 before streaming can
+begin. This ensures that the firmware and image versions are synchronized with
+the installed UHD and MATLAB support package. The following command can be used
+to reconfigure the image on the device before running the transmit and
+receive operations:
+
+% {\scriptsize
+\begin{lstlisting}
+status=sdruload('Device','X310','IPAddress','192.168.10.2');
+\end{lstlisting}
+% }
+A successful execution of this command confirms that the X310 is correctly
+programmed and ready for baseband transmission and reception.
+
+\subsection*{Wireless Testbench sdrtx / sdrrx Interface}
+
+In addition to the legacy \texttt{sdru} interface, newer MATLAB workflows rely
+on the Wireless Testbench \texttt{sdrtx} and \texttt{sdrrx} System objects. These
+objects integrate directly with the support package for NI USRP radios and
+provide convenient functions such as \texttt{transmitRepeat}.
+
+Before executing scripts that use these objects, the USRP X310 must first be
+initialized as part of the Wireless Testbench Support Package installation.
+During this process, the Radio Setup wizard is launched from
+\texttt{Add-Ons}~$\rightarrow$~\texttt{Manage Add-Ons}~$\rightarrow$~\texttt{Hardware Setup},
+where the user selects the NI USRP hardware and configures the connection
+settings. The wizard automatically detects the X310 on the network, verifies
+IP connectivity, and updates the FPGA image and firmware if necessary. After
+this initialization, MATLAB transmitter and receiver System objects can
+communicate with the USRP using the assigned device identifier or IP address.
+
+\section{Baseband Transmitter and Receiver Design}
+
+In the proposed setup, the USRP X310 is controlled from MATLAB and operates as
+a baseband transmitter--receiver pair. A complex baseband frame is first
+generated in MATLAB and then uploaded to the radio. The transmitter is
+configured to continuously retransmit this buffer, while the receiver runs in a
+loop and acquires incoming IQ samples for further processing.
+
+\subsection*{Baseband Transmitter}
+
+The baseband transmitter generates a complex-valued IQ sequence, which may
+represent a test tone, a modulated symbol stream, or a training sequence. This
+frame is sent once to the USRP using a transmit object. Instead of calling the
+transmitter inside a loop, the hardware is instructed to repeat the same frame
+indefinitely, so the transmit operation runs in the background on the USRP.
+
+\subsection*{Baseband Receiver}
+
+The baseband receiver is implemented as a corresponding receive object in
+MATLAB. The receiver is executed inside a \texttt{for}-loop, where a new frame
+of IQ samples is captured from the USRP in each iteration. These received
+frames can then be used for spectrum analysis, synchronization, correlation
+with a known preamble, or bit-error rate (BER) computation. In this way, the
+transmitter operates continuously, while the receiver processes a stream of
+frames in real time.
+
+\subsection*{Baseband Transmitter and Receiver Example in MATLAB}
+
+% {\scriptsize
+\begin{lstlisting}[language=MATLAB]
+%% Baseband Transmitter and Receiver with USRP X310
+% Assumes:
+% - Wireless Testbench / USRP support package installed
+% - USRP X310 reachable at the given device name or IP
+
+fc       = 2.4e9;     % Center frequency
+fs       = 1e6;       % Sample rate
+txGain   = 20;        % Transmit gain (dB)
+rxGain   = 15;        % Receive gain (dB)
+frameLen = 2048;      % Samples per frame
+numFrames = 200;      % Number of frames to receive
+
+%% Create Transmitter Object
+tx = sdrtx('USRP X310', ...
+    'CenterFrequency', fc, ...
+    'Gain',           txGain, ...
+    'BasebandSampleRate', fs);
+
+%% Create Receiver Object
+rx = sdrrx('USRP X310', ...
+    'CenterFrequency',     fc, ...
+    'Gain',                rxGain, ...
+    'BasebandSampleRate',  fs, ...
+    'SamplesPerFrame',     frameLen, ...
+    'OutputDataType',     'double');
+
+%% Generate Baseband Transmit Frame (example: complex tone)
+n       = (0:frameLen-1).';
+txFrame = exp(1j*2*pi*0.01*n);   % simple complex exponential
+txFrame = txFrame ./ max(abs(txFrame));  % normalize
+
+%% Start Continuous Transmission on Hardware
+transmitRepeat(tx, txFrame);
+disp('Tx is continuously replaying the baseband frame...');
+
+%% Continuous Reception Loop
+for k = 1:numFrames
+    rxSig = rx();
+    
+    % compute and display average received power
+    rxPower = mean(abs(rxSig).^2);
+    fprintf('Frame %d: Rx power = %.3f\n', k, rxPower);
+end
+
+%% Stop Transmission and Release Hardware
+release(tx);
+release(rx);
+\end{lstlisting}
+
+\section{Difficulties Faced}
+
+During the implementation of the baseband transmitter and receiver using the
+USRP X310 and MATLAB, several practical difficulties were encountered. These
+issues affected the signal levels, workflow efficiency, and flexibility of the
+software environment.
+
+\subsection*{Low Transmit and Receive Power}
+
+One of the main issues observed was that the received and transmitted signal
+powers were significantly lower than expected. Even after successful
+configuration of the center frequency and sample rate, the effective RF power
+at the receiver side remained low. This was primarily attributed to
+insufficient gain settings on the transmitter and receiver chains. As a result,
+the received signal-to-noise ratio (SNR) was degraded, making it more difficult
+to reliably observe and process the transmitted waveform without further
+amplification or gain adjustment.
+
+\subsection*{Frequent FPGA Image Reconfiguration}
+
+Another notable difficulty was the frequent need to re-burn or reload the FPGA
+image on the USRP X310 from within MATLAB. In order to switch between different
+configurations or dependencies (e.g., different MATLAB support packages, UHD
+versions, or experimental setups), the image often had to be reconfigured using
+commands such as:
+% {\footnotesize
+\begin{lstlisting}
+status = sdruload('Device','X310','IPAddress','192.168.10.2');
+\end{lstlisting}
+% }
+This repeated image loading added considerable overhead to the workflow and
+increased setup time before each experiment, especially when the device was
+power-cycled or when changing between multiple test scenarios.
+
+\subsection*{Scripting Software Limitations}
+
+Another major difficulty encountered was related to the MATLAB scripting
+environment itself. Since MATLAB does not natively support multithreading for
+System object execution, the entire transmit--receive chain runs as a single
+threaded process. This significantly limits real-time performance when handling
+high-rate streaming or processing-intensive algorithms. As a result, the CPU
+workload frequently became a bottleneck, restricting the maximum achievable
+sampling rates and the responsiveness of the system.
+
+Additionally, the availability of detailed documentation and example resources
+specifically for the USRP X310 in MATLAB was limited. Most online support and
+open-source code repositories were focused on GNU Radio or UHD C++ workflows,
+making it difficult to troubleshoot MATLAB-specific integration issues. This
+lack of reference material and debugging guidance contributed to increased
+development time and experimentation overhead.

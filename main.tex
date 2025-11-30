@@ -1,0 +1,147 @@
+\documentclass[letterpaper,twocolumn,openany,nodeprecatedcode]{dndbook}
+\usepackage{amsmath}
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[singlelinecheck=false]{caption}
+\usepackage{lipsum}
+\usepackage{listings}
+\usepackage{shortvrb}
+\usepackage{stfloats}
+\usepackage{graphicx}
+\usepackage[inkscapelatex=false]{svg}
+\usepackage{hyperref}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\usepackage{svg}
+\svgsetup{inkscapeexe=inkscape}
+\usepackage{pdflscape}
+\usepackage{graphicx}
+\usepackage{circuitikz}
+\usetikzlibrary{positioning} % Additional library for relative positioning 
+\usetikzlibrary{calc} % Additional library for calculating within tikz
+\usetikzlibrary{shapes.geometric, arrows}
+
+\usetikzlibrary{arrows.meta, positioning}
+
+\usetikzlibrary{circuits.logic.US, positioning}
+
+
+%--- Custom Colors ---
+\definecolor{aliceblue}{RGB}{230, 240, 255}
+\definecolor{alicetext}{RGB}{0, 50, 150}
+\definecolor{bobgreen}{RGB}{235, 255, 235}
+\definecolor{bobtext}{RGB}{0, 100, 50}
+\definecolor{conceptgray}{RGB}{245, 245, 245}
+
+%--- Custom Box Definitions ---
+
+% Box for Alice (Transmitter)
+\newtcolorbox{alicebox}[1]{
+    colback=aliceblue,
+    colframe=alicetext,
+    fonttitle=\bfseries\Large,
+    coltitle=white,
+    title={#1},
+    enhanced,
+    attach boxed title to top left={xshift=5mm, yshift=-2mm},
+    boxed title style={colback=alicetext, sharp corners},
+    sharp corners=south,
+    arc=5mm
+}
+
+% Box for Bob (Receiver)
+\newtcolorbox{bobbox}[1]{
+    colback=bobgreen,
+    colframe=bobtext,
+    fonttitle=\bfseries\Large,
+    coltitle=white,
+    title={#1},
+    enhanced,
+    attach boxed title to top right={xshift=-5mm, yshift=-2mm},
+    boxed title style={colback=bobtext, sharp corners},
+    sharp corners=south,
+    arc=5mm
+}
+
+% Box for Key Concepts
+\newtcolorbox{conceptbox}[1]{
+    colback=conceptgray,
+    colframe=black!60,
+    fonttitle=\bfseries,
+    title={#1},
+    leftrule=4pt,
+    arc=2mm
+}
+
+\captionsetup[table]{labelformat=empty,font={sf,sc,bf,},skip=0pt}
+
+\MakeShortVerb{|}
+
+\lstset{%
+  basicstyle=\ttfamily\small,
+  language=C,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny,
+}
+
+\newcommand{\ChapterCredits}[1]{%
+\vspace{1em}
+\begin{DndReadAloud}
+  \textbf{Committed to parchment by:} #1
+\end{DndReadAloud}
+\vspace{1em}
+}
+
+\title{SDR Grimoire\\
+\large A Comprehensive Manual for Practical Communications using SDR and USRP}
+\author{Comm Lab Students}
+\date{\today}
+
+% Set theme color for SDR manual (using a tech-appropriate color)
+\DndSetThemeColor[PhbLightCyan]
+
+\begin{document}
+
+\frontmatter
+
+\maketitle
+
+\tableofcontents
+
+\mainmatter
+\include{chapters/contri.tex}
+
+\include{chapters/hardware}
+
+\include{chapters/buffer_flow}
+
+\include{chapters/matlab_programming}
+
+\include{chapters/matlab_examples}
+
+
+\include{chapters/examples_exercises}
+\include{chapters/SDR_Manual_2}
+
+\include{chapters/Pluto_to_USRP}
+
+
+
+\include{chapters/X310}
+% \include{chapters/tesr}
+
+\include{chapters/ofdm_python}
+
+\include{threading}
+% Appendix A: Quick Reference
+% Contents: SDR specifications
+\include{chapters/appendix_a}
+\include{chapters/tesr}
+
+
+\end{document}

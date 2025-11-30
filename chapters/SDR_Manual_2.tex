@@ -1,0 +1,913 @@
+\onecolumn
+\setlength{\headheight}{25pt}%
+
+% Defines a command used by tikz to calculate some coordinates for the front-page
+\makeatletter
+\newcommand{\gettikzxy}[3]{%
+  \tikz@scan@one@point\pgfutil@firstofone#1\relax
+  \edef#2{\the\pgf@x}%
+  \edef#3{\the\pgf@y}%
+}
+\makeatother
+
+
+\definecolor{accentyellow}{RGB}{255,255,255}
+
+
+% Defining Tickz Style
+\tikzstyle{startstop} = [rectangle, rounded corners, minimum width=2cm, minimum height=1cm, text centered, text width = 8cm, draw=black, fill=black]
+
+% \tikzstyle{io} = [trapezium, trapezium left angle=70, trapezium right angle=110, minimum width=3cm, minimum height=1cm, text centered, text width = 4.5cm, draw=black, fill=blue!30]
+
+\tikzstyle{process} = [rectangle, minimum width=2cm, minimum height=1cm, text centered, text width = 8cm, draw=black, fill=black]
+
+% \tikzstyle{decision} = [diamond, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=green!30]
+
+\tikzstyle{arrow} = [ultra thick,->,>=stealth]
+
+
+\chapter{USRP B210 Projects}
+\ChapterCredits{
+    Dhanush V Nayak,
+    Kaustubh Khachane
+}
+
+
+
+
+\section {Overview}
+
+This comprehensive documentation presents a detailed analysis of multiple software-defined radio (SDR) communication experiments conducted using USRP (Universal Software Radio Peripheral) and Adalm Pluto devices. The projects demonstrate advanced wireless communication techniques, implementing OFDM-based systems and addressing critical physical layer security concerns through the Alice-Bob-Eve security framework. These implementations serve as practical demonstrations of modern communication theory in real-world wireless scenarios.
+
+\begin{tcolorbox}[
+    colback=white,
+    colframe=black,
+    boxrule=2.5pt,
+    arc=1mm,
+    enhanced,
+    sharp corners,
+    title=\textcolor{accentyellow}{\textbf{Project Scope}},
+    top=8pt,
+    bottom=10pt,
+    left=10pt,
+    right=10pt
+]
+
+{\color{black}
+The documentation focuses on four major implementation projects in the domain of wireless communication and physical layer security. These include:
+}
+
+\vspace{0.2cm}
+
+\begin{itemize}[leftmargin=1.2cm, itemsep=0.22cm, label=\textcolor{accentyellow}{\large$\blacktriangleright$}]
+    \item {\color{black} OFDM-based communication between dual USRP transceivers}
+    \item {\color{black} Multi-antenna USRP communication with dual transmit chains}
+    \item {\color{black} Cross-platform communication between ADALM-Pluto and USRP devices}
+    \item {\color{black} Physical-layer security implementations mitigating eavesdropping threats}
+\end{itemize}
+
+\vspace{0.15cm}
+{\color{black}
+All implementation stages prioritize real-time signal processing, verification through SDR experimentation, and robustness against interference and cyber-attacks.
+}
+
+\end{tcolorbox}
+
+\section{Installation}
+
+See the installation instructions for USRP in GNU Radio and MATLAB on GitHub: \href{https://github.com/dhanushnayakh03/COMMUNICATIONS_LAB_EE3701/tree/main/Installation_Guide}{\underline{INSTALLATION}}\\
+
+Try out the examples to get started.
+
+\section{Project 1: OFDM-Based Communication Between Dual USRP Transceivers}
+
+\subsection{Project Objective and Motivation}
+
+The primary objective of this project was to establish reliable bidirectional communication between two USRP B200/B210 software-defined radios using Orthogonal Frequency Division Multiplexing (OFDM). OFDM represents a cornerstone technology in modern wireless communications, providing robust transmission over frequency-selective fading channels by dividing the channel bandwidth into multiple orthogonal subcarriers. This approach enables high spectral efficiency and resilience to multipath interference.
+% Better OFDM Block Diagram (clean, aligned, symmetric)  
+\subsubsection{System Block Diagram}
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{accentyellow}{\textbf{Key Objectives}}]
+\color{black}
+\begin{enumerate}[leftmargin=*,itemsep=0.2cm]
+  \item \textbf{System Implementation:} Develop a complete OFDM transceiver architecture using MATLAB/GNU Radio
+  \item \textbf{Channel Characterization:} Measure and analyze real-world channel impulse responses
+  \item \textbf{Performance Evaluation:} Assess bit error rate (BER), packet delivery ratio, and spectral efficiency
+  \item \textbf{Synchronization:} Implement robust timing and frequency synchronization algorithms
+  \item \textbf{Adaptive Modulation:} Explore dynamic subcarrier mapping based on channel conditions
+\end{enumerate}
+\end{tcolorbox}
+
+
+
+\subsection{Technical Architecture}
+\begin{tcolorbox}[
+    colback=white,       % Changed to black for better contrast (or keep white)
+    colframe=black,
+    boxrule=2pt,
+    arc=0.5mm,
+    % --- EXPANSION SETTINGS ---
+    top=1cm,             % Adds space inside top of box
+    bottom=1cm,          % Adds space inside bottom of box
+    left=0.5cm,
+    right=0.5cm
+]
+\centering
+
+% Resize width to fit, aspect ratio is now "taller" due to tikz changes
+\resizebox{1\textwidth}{!}{%
+\begin{tikzpicture}[
+    node distance=2.5cm, % Horizontal distance
+    every node/.style={font=\bfseries\large}, % Increased font size slightly
+    block/.style={
+        draw,
+        rectangle,
+        rounded corners=3pt,
+        fill=techblue!30,
+        minimum height=2.0cm, % Made blocks taller
+        minimum width=3.2cm,  % Made blocks wider
+        align=center,
+        line width=1.5pt
+    },
+    chanblock/.style={
+        draw,
+        rectangle,
+        rounded corners=3pt,
+        fill=techblue!50,
+        minimum height=2.0cm,
+        minimum width=3.2cm,
+        align=center,
+        line width=1.5pt
+    },
+    arrow/.style={->,ultra thick,black,line width=2.5pt}
+]
+
+% ---------------- TX ROW ----------------
+\node[block] (data) {Data\\Payload};
+\node[block, right=of data] (encode) {Preamble\\Design};
+\node[block, right=of encode] (map) {Subcarrier\\Mapping};
+\node[block, right=of map] (ifft) {IFFT};
+\node[block, right=of ifft] (cp) {Add Cyclic\\Prefix};
+
+% Connections
+\draw[arrow] (data) -- (encode);
+\draw[arrow] (encode) -- (map);
+\draw[arrow] (map) -- (ifft);
+\draw[arrow] (ifft) -- (cp);
+
+% ---------------- CHANNEL (Vertical Drop) ----------------
+% Increased 'below' distance to 5cm to make diagram vertically taller
+\node[chanblock, below=5cm of ifft] (chan) {Wireless\\Channel};
+
+% Right-angle connector for channel
+\draw[arrow] (cp) |- (chan);
+
+% ---------------- RX ROW ----------------
+% Nodes placed relative to Channel
+\node[block, left=of chan] (prdt) {Preamble\\Detection};
+\node[block, left=of prdt] (rxcp) {Remove Cyclic\\Prefix};
+\node[block, left=of rxcp] (fft) {FFT};
+\node[block, left=of fft] (eq) {Channel\\Equalization};
+\node[block, left=of eq] (demap) {Demapping};
+
+% Connections
+\draw[arrow] (chan) -- (prdt);
+\draw[arrow] (prdt) -- (rxcp);
+\draw[arrow] (rxcp) -- (fft);
+\draw[arrow] (fft) -- (eq);
+\draw[arrow] (eq) -- (demap);
+
+\end{tikzpicture}
+} % end resizebox
+
+\end{tcolorbox}
+
+
+
+
+
+% Better OFDM Block Diagram (clean, aligned, symmetric)
+% \begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm]
+% \centering
+
+% % Resize only width, keep aspect ratio natural
+% \resizebox{1\textwidth}{!}{%
+% \begin{tikzpicture}[
+%     node distance=2.6cm,
+%     every node/.style={font=\small},
+%     block/.style={
+%         draw,
+%         rectangle,
+%         rounded corners=2pt,
+%         fill=techblue!30,
+%         minimum height=1.1cm,
+%         minimum width=2.6cm,
+%         align=center
+%     },
+%     chanblock/.style={
+%         draw,
+%         rectangle,
+%         rounded corners=2pt,
+%         fill=techblue!50,
+%         minimum height=1.1cm,
+%         minimum width=2.6cm,
+%         align=center
+%     },
+%     arrow/.style={->,ultra thick,black}
+% ]
+
+% % ---------------- TX ----------------
+% \node[block] (data) {Data Payload};
+% \node[block, right=of data] (encode) {Preamble\\Design};
+% \node[block, right=of encode] (map) {Subcarrier\\Mapping};
+% \node[block, right=of map] (ifft) {IFFT};
+% \node[block, right=of ifft] (cp) {Add Cyclic\\Prefix};
+
+% \draw[arrow] (data) -- (encode);
+% \draw[arrow] (encode) -- (map);
+% \draw[arrow] (map) -- (ifft);
+% \draw[arrow] (ifft) -- (cp);
+
+% % ---------------- Channel ----------------
+% \node[chanblock, below=1.7cm of ifft] (chan) {Wireless\\Channel};
+% \draw[arrow] (cp) |- (chan);
+
+% % ---------------- RX ----------------
+% \node[block, left=2.6cm of chan] (prdt) {Preamble\\Detection};
+% \node[block, left=2.6cm of prdt] (rxcp) {Remove Cyclic\\Prefix};
+% \node[block, left=2.6cm of rxcp] (fft) {FFT};
+% \node[block, left=2.6cm of fft] (eq) {Channel\\Equalization};
+% \node[block, left=2.6cm of eq] (demap) {Demapping};
+
+% \draw[arrow] (chan) -- (prdt);
+% \draw[arrow] (prdt) -- (rxcp);
+% \draw[arrow] (rxcp) -- (fft);
+% \draw[arrow] (fft) -- (eq);
+% \draw[arrow] (eq) -- (demap);
+
+% \end{tikzpicture}
+% } % end resizebox
+
+% \end{tcolorbox}
+
+
+
+\subsubsection{OFDM Modulation Process}
+
+The OFDM transmission chain encompasses the following sequential operations:
+
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,
+title=\textcolor{accentyellow}{\textbf{OFDM Modulation Process (Aligned with System Architecture)}}]
+\color{black}
+\begin{enumerate}[leftmargin=* ,itemsep=0.18cm]
+
+    \item \textbf{Data Payload Generation:}  
+    Raw digital information (binary payload) is prepared as the input for OFDM symbol construction.
+
+    \item \textbf{Preamble Design:}  
+    A deterministic synchronization preamble (e.g., short/long training symbols) is generated for packet detection, timing estimation, and coarse frequency correction.
+
+    \item \textbf{Subcarrier Mapping:}  
+    Payload bits are modulation-mapped (BPSK/QPSK/16-QAM/64-QAM) and assigned to specific OFDM subcarriers, leaving guard and DC tones unused.
+
+    \item \textbf{IFFT Operation:}  
+    Frequency-domain symbols across all subcarriers are transformed into a composite time-domain waveform using an \(N\)-point IFFT.
+
+    \item \textbf{Cyclic Prefix Addition:}  
+    A prefix of length \(L_{cp}\) is copied from the end of the IFFT output and appended to each OFDM symbol to combat multipath-induced ISI.
+
+    \item \textbf{Wireless Channel Transmission:}  
+    The CP-prefixed frame is pulse-shaped, DAC-converted, and transmitted over the wireless channel where fading, noise, and CFO distort the signal.
+
+    \item \textbf{Preamble Detection (Receiver):}  
+    The received stream is scanned for correlation peaks, enabling accurate frame start detection and coarse timing recovery.
+
+    \item \textbf{Cyclic Prefix Removal:}  
+    The detected OFDM symbol start is used to strip off the CP before demodulation.
+
+    \item \textbf{FFT Demodulation:}  
+    An \(N\)-point FFT converts the received time-domain OFDM waveform back into frequency-domain subcarrier symbols.
+
+    \item \textbf{Channel Equalization:}  
+    Using preamble-derived channel estimates, each subcarrier is equalized (ZF/MMSE) to reverse channel distortion.
+
+    \item \textbf{Symbol Demapping:}  
+    Equalized complex symbols are mapped back to bits using the inverse constellation mapping rule to reconstruct the original payload.
+
+\end{enumerate}
+\end{tcolorbox}
+
+
+
+\subsubsection{Channel Characterization}
+
+Channel impulse response (CIR) measurement forms a critical component of system evaluation:
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{accentyellow}{\textbf{Channel Measurement Procedure}}]
+\color{black}
+\begin{enumerate}[leftmargin=*,itemsep=0.15cm]
+  \item \textbf{Preamble Transmission:} A known reference sequence (Zadoff-Chu or PAPR-optimized preamble) is transmitted prior to data symbols.
+  \item \textbf{Receiver Correlation:} Received preamble is correlated with the known sequence to extract CIR estimates.
+  \item \textbf{CIR Logging:} Channel tap coefficients and timing estimates are stored for post-analysis.
+  \item \textbf{Statistical Analysis:} Path delay spread, doppler effects, and fading characteristics are computed from CIR measurements.
+\end{enumerate}
+\end{tcolorbox}
+
+\subsection{Implementation Details}
+
+\subsubsection{Hardware Configuration}
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{accentyellow}{\textbf{System Parameters}}]
+\color{black}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Parameter} & \textbf{Configuration} \\
+\hline
+Radio Frequency (RF) Center Frequency & 2.4 GHz ISM Band \\
+\hline
+Channel Bandwidth & 10 -- 20 MHz \\
+\hline
+Number of Subcarriers (FFT Size) & 64, 128, or 256 \\
+\hline
+Cyclic Prefix Length & 16 samples (Guard Interval) \\
+\hline
+OFDM Symbol Duration & $T_{sym} = \frac{N_{fft} + N_{cp}}{f_s}$ \\
+\hline
+Subcarrier Spacing & $\Delta f = \frac{B_w}{N_{fft}}$ \\
+\hline
+Modulation Schemes & BPSK, QPSK, 16-QAM \\
+\hline
+Preamble Sequence & Barker Sequence \\
+\hline
+\end{tabular}
+\end{tcolorbox}
+
+\subsubsection{Software Architecture}
+
+The implementation employs a layered architecture separating physical layer processing from hardware abstraction:
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm]
+\color{black}
+\begin{description}[leftmargin=2.5cm,font=\textbf]
+  \item [Application Layer:] Data generation, performance metrics, result visualization
+  \item [MAC Layer:] Packet framing, preamble insertion, inter-frame spacing
+  \item [Physical Layer:] OFDM modulation/demodulation, equalization, synchronization
+  \item [Hardware Abstraction:] USRP driver interface, transmit/receive buffering
+\end{description}
+\end{tcolorbox}
+
+
+
+\subsection{Measurement Metrics}
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{accentyellow}{\textbf{Performance Evaluation Criteria}}]
+\color{black}
+\begin{itemize}[leftmargin=*,itemsep=0.15cm]
+  \item \textbf{Bit Error Rate (BER):} Probability of incorrect bit reception as function of SNR
+  \item \textbf{Packet Delivery Ratio (PDR):} Percentage of correctly received packets over total transmitted
+  \item \textbf{Channel Capacity:} Shannon capacity computed from measured SNR and bandwidth
+  \item \textbf{Equalization Quality:} Residual inter-carrier interference after frequency-domain equalization
+  \item \textbf{Synchronization Accuracy:} Timing offset estimation error in samples
+  \item \textbf{Spectral Efficiency:} Achieved data rate divided by utilized bandwidth
+\end{itemize}
+\end{tcolorbox}
+
+
+\section{Project 2: Multi-Antenna USRP Communications with Dual Transmit Chains}
+
+\subsection{Motivation and Objectives}
+
+The second project extends single-antenna OFDM systems to leverage MIMO (Multiple-Input Multiple-Output) capabilities of USRP hardware. By employing multiple transmit antennas, the system achieves spatial diversity and increased throughput. This implementation addresses practical challenges in antenna array calibration, spatial channel estimation, and precoding design.
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{accentyellow}{\textbf{MIMO System Advantages}}]
+\color{black}
+\begin{itemize}[leftmargin=*,itemsep=0.15cm]
+  \item \textbf{Spatial Diversity:} Multiple independent fading paths reduce outage probability
+  \item \textbf{Increased Capacity:} Shannon capacity scales linearly with $\min(M_t, M_r)$ (number of transmit/receive antennas)
+  \item \textbf{Coding Opportunities:} We can apply convolutional coding as well for error correction receiver.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{System Architecture}
+
+\subsubsection{MIMO-OFDM Signal Model}
+
+For a $M_t \times M_r$ MIMO system with OFDM modulation, the received signal at subcarrier $k$ is expressed as:
+
+\[
+\mathbf{Y}_k = \mathbf{H}_k \mathbf{X}_k + \mathbf{N}_k
+\]
+
+where:
+\begin{itemize}[leftmargin=1cm]
+  \item $\mathbf{X}_k$ is the $M_t \times 1$ transmit symbol vector
+  \item $\mathbf{H}_k$ is the $M_r \times M_t$ channel matrix at subcarrier $k$
+  \item $\mathbf{N}_k$ is additive black Gaussian noise
+\end{itemize}
+
+\subsubsection{Hardware Configuration}
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{accentyellow}{\textbf{Dual TX USRP Configuration}}]
+\color{black}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Component} & \textbf{Specification} \\
+\hline
+Number of Transmit Chains & 2 (TX1, TX2 connectors) \\
+\hline
+Number of Receive Chains & 2 or more (RX2, RX3 connectors) \\
+\hline
+TX/RX Isolation & Synchronized \\
+\hline
+Antenna Configuration & Internal config of USRP \\
+\hline
+Antenna Spacing & $\lambda/2$ to $\lambda$ at operating frequency \\
+\hline
+Synchronization Method & Preamble based synchronization\\
+\hline
+\end{tabular}
+\end{tcolorbox}
+
+
+\section{Project 3: Cross-Platform Communication between Adalm Pluto and USRP}
+
+\subsection{Project Overview}
+
+This project addresses interoperability challenges when integrating devices from different manufacturers (Analog Devices Adalm Pluto and Ettus Research USRP). Such cross-platform systems are increasingly important in networked radio scenarios, cognitive radio systems, and heterogeneous SDR testbeds.
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{accentyellow}{\textbf{Integration Challenges}}]
+\color{black}
+\begin{enumerate}[leftmargin=*,itemsep=0.15cm]
+  \item \textbf{Hardware Incompatibility:} Different RF front-ends, ADC/DAC resolutions, and sampling rates
+  \item \textbf{Timing Misalignment:} Independent clock sources causing frequency and phase offsets
+  \item \textbf{Software Stack Differences:} Distinct APIs (IIO framework vs. UHD library)
+  \item \textbf{Channel Mismatch:} Different noise figures and gain ranges
+\end{enumerate}
+\end{tcolorbox}
+
+\subsection{Technical Approach}
+
+\subsubsection{Device Specifications}
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{accentyellow}{\textbf{Hardware Comparison}}]
+\color{black}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Parameter} & \textbf{Adalm Pluto} & \textbf{USRP B210/200} \\
+\hline
+RF Range & 325 MHz -- 4 GHz & 70 MHz -- 6 GHz \\
+\hline
+ADC/DAC Resolution & 12-bit & 14-bit \\
+\hline
+Bandwidth & 20 MHz (fixed) & Tunable: 5 -- 40 MHz \\
+\hline
+RX Noise Figure & $\sim$7 dB & $\sim$5 dB \\
+\hline
+TX Power & 0 dBm max & 76 dBm max \\
+\hline
+Interface & USB 2.0 & USB 3.0 \\
+\hline
+Cost &  25k Rs. & 300k Rs. \\
+\hline
+\end{tabular}
+\end{tcolorbox}
+
+\subsubsection{Synchronization Architecture}
+
+Cross-platform operation requires careful synchronization of multiple parameters:
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm]
+\color{black}
+\textbf{Synchronization Hierarchy:}
+\begin{description}[leftmargin=2.5cm,font=\textbf]
+  \item [Frequency Sync:] Master oscillator reference to both devices via distributed oscillator
+  \item [Time Sync:] Preamble based time sync or network time protocol synchronization
+  \item [Frame Sync:] Beacon signal with known preamble for frame-level alignment
+  \item [Fine Freq Sync:] Automatic frequency control loop to track residual offsets
+\end{description}
+\end{tcolorbox}
+
+%\subsection{Communication Protocol Design}
+
+\subsubsection{Frame Structure}
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm]
+\centering
+
+% Auto-scale to fit the page width
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[node distance=0cm, font=\scriptsize]
+
+% ==========================
+% FRAME BLOCKS
+% ==========================
+
+% Row of blocks (left to right)
+\node[draw,rectangle,fill=techblue!60,minimum width=1.7cm,minimum height=0.9cm,align=center] (sfd) {SFD};
+
+\node[draw,rectangle,fill=techblue!50,minimum width=3.0cm,minimum height=0.9cm,align=center,right=0cm of sfd] (preamble) {Preamble};
+
+\node[draw,rectangle,fill=techblue!45,minimum width=2.5cm,minimum height=0.9cm,align=center,right=0cm of preamble] (lts) {Barker};
+
+\node[draw,rectangle,fill=techblue!35,minimum width=2.6cm,minimum height=0.9cm,align=center,right=0cm of lts] (hdr) {Header};
+
+\node[draw,rectangle,fill=techblue!30,minimum width=4.2cm,minimum height=0.9cm,align=center,right=0cm of hdr] (data) {Payload};
+
+\node[draw,rectangle,fill=techblue!25,minimum width=2.0cm,minimum height=0.9cm,align=center,right=0cm of data] (crc) {CRC};
+
+
+% ==========================
+% GROUP LABELS (underneath)
+% ==========================
+
+% Synchronization block (covers SFD + Preamble + LTS)
+\node[below=0.50cm of preamble, align=center, text=black] (syncLbl)
+{Synchronization};
+
+% Control block (Header)
+\node[below=0.50cm of hdr, align=center, text=black] (ctrlLbl)
+{Control};
+
+% Information block (Payload + CRC)
+\node[below=0.50cm of data, align=center, text=black] (infoLbl)
+{Information};
+
+% Optional: horizontal grouping lines (cleaner look)
+\draw[black!60, thick] ($(sfd.south west)+(0,-0.15)$) -- ($(lts.south east)+(0,-0.15)$);
+\draw[black!60, thick] ($(hdr.south west)+(0,-0.15)$) -- ($(hdr.south east)+(0,-0.15)$);
+\draw[black!60, thick] ($(data.south west)+(0,-0.15)$) -- ($(crc.south east)+(0,-0.15)$);
+
+\end{tikzpicture}%
+}
+
+\end{tcolorbox}
+
+% ==========================
+% DESCRIPTIONS
+% ==========================
+
+where:
+\begin{itemize}[leftmargin=1cm,itemsep=0.12cm]
+  \item \textbf{SFD:} Start Frame Delimiter for packet boundary detection
+  \item \textbf{Preamble:} Training pattern for AGC settling and coarse sync
+  \item \textbf{Barker:} Barker Sequence for accurate channel estimation
+  \item \textbf{Header:} Contains length, modulation type, flags, and MAC info
+  \item \textbf{Payload:} OFDM data symbols carrying user information
+  \item \textbf{CRC:} Cyclic Redundancy Check for error detection
+\end{itemize}
+
+
+
+\section{Project 4: Physical Layer Security -- Alice-Bob-Eve Framework}
+
+\subsection{Security Model Overview}
+
+Physical layer security (PLS) represents a fundamental approach to securing wireless communications by exploiting properties of the propagation channel itself. The Alice-Bob-Eve scenario models an eavesdropping threat where an adversary (Eve) attempts to intercept communications between authorized parties (Alice and Bob). Our implementation addresses key security challenges at the modulation, coding, and channel exploitation levels.
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{accentyellow}{\textbf{Information Theoretic Foundation}}]
+\color{black}
+The secrecy capacity of a wiretap channel is defined as:
+\[
+C_s = \max_{p(x)} [I(X; Y) - I(X; Z)]
+\]
+where $Y$ is Bob's received signal, $Z$ is Eve's received signal, and $I(\cdot;\cdot)$ denotes mutual information. Positive secrecy capacity requires Bob's channel to be superior to Eve's, either through better SNR or by some artificial method of induction.
+\end{tcolorbox}
+
+\subsection{Attack and Defense Scenarios}
+
+\subsubsection{Eavesdropping Attacks}
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{accentyellow}{\textbf{Eve's Attack Strategies}}]
+\color{black}
+\begin{enumerate}[leftmargin=*,itemsep=0.15cm]
+  \item \textbf{Passive Eavesdropping:} Direct reception and decoding of transmitted signals without modification
+  \item \textbf{Active Eavesdropping:} Transmission of pilot signals to facilitate channel estimation
+  \item \textbf{Brute Force Decoding:} Attempting multiple decoding hypotheses with computational resources
+  \item \textbf{Signal Intelligence (SIGINT):} Statistical analysis of signal properties for feature extraction
+\end{enumerate}
+\end{tcolorbox}
+
+\subsubsection{Defense Mechanisms}
+
+\textbf{Implemented Security Technique: Artificial Noise Injection}
+
+\begin{itemize}[itemsep=6pt, leftmargin=1cm]
+    \item Artificial Noise (AN) is intentionally added to the transmitted signal to degrade the channel quality at potential eavesdroppers.
+    
+    \item The noise is designed such that it minimally impacts the intended receiver, ensuring confidential communication performance remains stable.
+    
+    \item In multi-antenna systems, AN is transmitted in the null space of the legitimate receiver’s channel, making it invisible to the intended user.
+    
+    \item The method increases secrecy capacity by exploiting channel asymmetry between the legitimate receiver and the eavesdropper.
+    
+    \item This technique is effective in scenarios where the transmitter has partial or full knowledge of the channel state information (CSI).
+\end{itemize}
+
+\section{Alice Bob Eve Problem}
+\section{Problem Statement}
+
+The communication scenario consists of three key entities involved in secure wireless transmission:
+
+\begin{itemize}
+    \item \textbf{Alice} – the legitimate transmitter equipped with two transmit antennas (Tx1 and Tx2).
+    \item \textbf{Bob} – the intended legitimate receiver with a single receive antenna.
+    \item \textbf{Eve} – a passive eavesdropper, also equipped with a single receive antenna.
+\end{itemize}
+
+The primary objective is to ensure \textbf{physical-layer security}, i.e., Alice must transmit information such that Bob can reliably decode the message while Eve gains minimal or no information.
+
+\section{System Model}
+
+Alice transmits two independent data symbols using her two transmit chains. The transmitted vector is
+\[
+    \mathbf{x} = 
+    \begin{bmatrix}
+        x_1 \\ x_2
+    \end{bmatrix}.
+\]
+
+\subsection{Received Signal at Bob}
+
+Bob observes a noisy linear combination of the transmitted symbols through the wireless channel:
+\[
+    y_B = h_{1B}x_1 + h_{2B}x_2 + n_B,
+\]
+where
+\begin{itemize}
+    \item \( h_{1B}, h_{2B} \) denote the channel gains from Alice’s antennas Tx1 and Tx2 to Bob,
+    \item \( n_B \) represents the additive black Gaussian noise (AWGN) at Bob.
+\end{itemize}
+
+\subsection{Received Signal at Eve}
+
+Similarly, Eve receives:
+\[
+    y_E = h_{1E}x_1 + h_{2E}x_2 + n_E,
+\]
+where \( h_{1E}, h_{2E} \) are the channel gains towards Eve, and \( n_E \) denotes Eve’s receiver noise.
+
+This model forms the basis for analyzing the secrecy capacity and determining suitable transmission strategies to maximize Bob’s received quality while minimizing information leakage to Eve.
+\subsection{System Implementation}
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm]
+\centering
+\begin{tikzpicture}[
+    node distance=1cm and 1cm,
+    every node/.style={font=\small},
+    tx/.style={rectangle, draw, rounded corners, fill=blue!10, align=center, minimum width=1.8cm, minimum height=0.6cm},
+    rx/.style={rectangle, draw, rounded corners, fill=green!10, align=center, minimum width=1.2cm, minimum height=0.6cm},
+    sum/.style={circle, draw, fill=yellow!20, minimum size=8mm, inner sep=0pt , align = center},
+    line/.style={-Stealth, thick}
+]
+
+% Nodes for Alice
+\node[tx] (alice) {Alice\\(2 Tx)};
+\node[tx, above right=1.2cm and 1.8cm of alice] (tx1) {Tx$_1$: $k_1s+ w$};
+\node[tx, below right=1.2cm and 1.8cm of alice] (tx2) {Tx$_2$: $k_2s + w$};
+
+% Bob and Eve receivers
+\node[rx, right=2cm of tx1] (bob) {Bob\\(1 Rx)};
+\node[rx, right=2cm of tx2] (eve) {Eve\\(1 Rx)};
+
+% Channel labels for Bob
+\draw[line] (tx1.east) -- node[above] {$h_1$} (bob.west);
+\draw[line] (tx2.east) -- node[below] {$h_2$} (bob.west);
+
+% Clean dashed lines for Eve (avoiding intersections)
+\draw[line, dashed] (tx1.east) -- node[pos=0.2, above] {$g_1$} (eve.west); % <-- direct line for g1
+
+\draw[line, dashed] (tx2.east) -- node[pos=0.5, below] {$g_2$} (eve.west);
+
+% Labels for received signals
+\node[above=0.15cm of bob] {Received signal: $y_B = h_1x_1 + h_2x_2 + w$};
+\node[below=0.15cm of eve] {Received signal: $y_E = g_1x_1 + g_2x_2 + w$};
+
+% Artificial noise source
+\node[sum, below=1.3cm of alice] (noise) {$w$};
+\draw[line, dashed] (noise) -| (tx1.south west);
+\draw[line, dashed] (noise) -| (tx2.south west);
+\node[below=0.1cm of noise] {Artificial Noise};
+
+\end{tikzpicture}
+\end{tcolorbox}
+
+% \subsubsection{Channel State Information Exploitation}
+
+% \begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{accentyellow}{\textbf{CSI-Based Security Strategies}}]
+% \color{black}
+% \begin{enumerate}[leftmargin=*,itemsep=0.15cm]
+%   \item \textbf{Channel Measurement:} Alice and Bob perform channel sounding with training sequences
+%   \item \textbf{CSI Feedback:} Bob reports channel quality metrics to Alice via secure reverse link
+%   \item \textbf{Reciprocity Exploitation:} TDD mode leverages Alice-Bob channel reciprocity (Bob's CSI for Alice)
+%   \item \textbf{Quantization and Feedback:} Bob quantizes CSI to $Q$ bits, exploiting quantization noise
+%   \item \textbf{Secrecy Beamforming:} Alice constructs transmit precoder based on Bob's reported CSI
+%   \item \textbf{Artificial Noise Design:} Precoder creates harmful interference aligned with Eve's null space
+% \end{enumerate}
+% \end{tcolorbox}
+
+% \subsection{Performance Metrics for Security}
+
+% \begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{accentyellow}{\textbf{Key Security Metrics}}]
+% \color{black}
+% \begin{description}[leftmargin=2.5cm,font=\textbf]
+%   \item [Secrecy Capacity:] $C_s = [I(X;Y) - I(X;Z)]^+$ bits per channel use
+%   \item [Information Leakage:] Mutual information $I(X;Z)$ available to eavesdropper
+%   \item [Secure Outage Probability:] Probability that $C_s < R_s$ (secrecy rate requirement)
+%   \item [Perfect Secrecy Rate:] Maximum rate guaranteeing zero information leakage
+%   \item [Eve's Equivocation Rate:] Entropy of plaintext given Eve's observations
+% \end{description}
+% \end{tcolorbox}
+
+% \subsubsection{Experimental Validation}
+
+% \begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm]
+% \color{black}
+% \textbf{Validation Procedure:}
+% \begin{enumerate}[leftmargin=*,itemsep=0.15cm]
+%   \item Establish three synchronized USRP nodes in controlled RF environment
+%   \item Implement beamforming transmissions with artificial noise injection
+%   \item Measure Bob's and Eve's received SNR at synchronized time instants
+%   \item Compute achievable rates for both receivers using Shannon capacity
+%   \item Log channel impulse responses for post-processing analysis
+%   \item Evaluate decoding success rates at various secrecy margin targets
+%   \item Quantify information leakage through mutual information estimation
+% \end{enumerate}
+% \end{tcolorbox}
+
+\section{Implementation Process Flow}
+
+\begin{tcolorbox}[
+  colback=gray!5,
+  colframe=black!80,
+  title=\textbf{MATLAB-Based Simulation Framework},
+  fonttitle=\bfseries,
+  sharp corners
+]
+The initial part of the work focused on building a complete Physical Layer Security (PLS) simulation environment in \textbf{MATLAB}. This included:
+\begin{itemize}
+    \item Modeling the Alice–Bob–Eve system under wireless fading channels.
+    \item Implementing OFDM modulation, demodulation, and equalization.
+    \item Simulating independent channels for both Bob and Eve.
+    \item Verifying theoretical concepts, including:
+    \begin{itemize}
+        \item Accurate channel estimation and equalization
+        \item Secure data transmission mechanisms
+        \item Performance comparison between Bob and Eve under identical conditions
+    \end{itemize}
+\end{itemize}
+
+These simulations provided a solid theoretical baseline before transitioning to real hardware experiments.
+\end{tcolorbox}
+
+
+\section{Exploration of GNU Radio}
+
+\begin{tcolorbox}[
+  colback=blue!3,
+  colframe=blue!80!black,
+  title=\textbf{Real-Time Signal Processing with GNU Radio},
+  fonttitle=\bfseries,
+  sharp corners
+]
+We next explored \textbf{GNU Radio} for real-time baseband processing and integration with USRP devices.  
+The objective was to implement dual-antenna transmission from Alice and simultaneous reception at Bob and Eve.
+
+\subsection*{Work Undertaken}
+\begin{itemize}
+    \item Designed OFDM-based flowgraphs using built-in and custom blocks.
+    \item Experimented with:
+    \begin{itemize}
+        \item OFDM modulation/demodulation blocks
+        \item Tag-based frame synchronization
+        \item Channel estimation and equalizer modules
+    \end{itemize}
+    \item Evaluated multi-USRP synchronization and data transport.
+\end{itemize}
+
+\subsection*{Challenges Encountered}
+\begin{itemize}
+    \item Timing and synchronization complexities in GNU Radio.
+    \item Tag-management overhead for multi-antenna, multi-frame transmission.
+    \item Debugging real-time data flow between multiple USRPs proved difficult.
+\end{itemize}
+\end{tcolorbox}
+
+
+\section{Experimental Setup with USRPs}
+
+\begin{tcolorbox}[
+  colback=green!4,
+  colframe=green!45!black,
+  title=\textbf{Hardware Implementation Using USRPs},
+  fonttitle=\bfseries,
+  sharp corners
+]
+The hardware configuration included:
+\begin{itemize}
+    \item \textbf{Two USRPs at Alice} for Tx1 and Tx2.
+    \item \textbf{One USRP at Bob} (legitimate receiver).
+    \item \textbf{One USRP at Eve} (eavesdropper).
+\end{itemize}
+
+\subsection*{Procedure}
+\begin{itemize}
+    \item Both transmit chains at Alice were synchronized for dual transmission.
+    \item Distinct OFDM frames were sent simultaneously from Tx1 and Tx2.
+    \item Bob received the combined signals and processed them in real-time using MATLAB.
+\end{itemize}
+\end{tcolorbox}
+
+
+\section{Achievements}
+
+\begin{tcolorbox}[
+  colback=yellow!6,
+  colframe=orange!85!black,
+  title=\textbf{Key Achievements So Far},
+  fonttitle=\bfseries,
+  sharp corners
+]
+Major accomplishments include:
+\begin{itemize}
+    \item Achieved \textbf{simultaneous dual-antenna transmission} from Alice.
+    \item Bob successfully \textbf{received and decoded} both data streams.
+    \item Implemented a complete \textbf{channel equalization} pipeline at the receiver.
+    \item Extracted and visualized the individual channel responses:
+    \begin{itemize}
+        \item Tx1 $\rightarrow$ Bob
+        \item Tx2 $\rightarrow$ Bob
+    \end{itemize}
+    \item Verified synchronization across all USRPs and validated channel estimation accuracy.
+\end{itemize}
+\end{tcolorbox}
+
+
+\section{Organisation}
+
+\subsection{Common Framework}
+
+All four projects share a unified signal processing framework implemented across multiple components:
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{white}{\textbf{Cross-Project Common Elements}}]
+\color{black}
+\begin{itemize}[leftmargin=*,itemsep=0.2cm]
+  \item \textbf{Modulation Base:} OFDM with configurable subcarrier count and modulation schemes
+  \item \textbf{Synchronization:} Timing offset detection via preamble correlation
+  \item \textbf{Channel Estimation:} Least-squares or MMSE channel estimation on training symbols
+  \item \textbf{Equalization:} Single-tap frequency-domain equalization per subcarrier
+  \item \textbf{Coding:} Convolutional codes with Viterbi decoding
+  \item \textbf{Logging Framework:} Centralized data acquisition for performance analysis
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{File Organization and Data Flow}
+
+The implementation organizes code across project folders with specialized modules:
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{white}{\textbf{Directory Structure}}]
+\color{black}
+\begin{description}[leftmargin=3cm,font=\texttt\small,labelwidth=3cm]
+  \item[Global\_Parameters\_PLS.m] : Master configuration file (center frequency, gains, packet structure)
+  \item[OFDM\_TX\_X.m] : OFDM transmitter implementation for node X (Alice/Bob/Eve)
+  \item[OFDM\_RX\_X.m] : OFDM receiver with equalization and synchronization
+  \item[Hardware\_TX\_X.m] : USRP/Pluto hardware interface (DAC buffering, gain control)
+  \item[Hardware\_RX\_X.m] : Hardware receiver interface (ADC streaming, data logging)
+  \item[corr\_code.m] : Preamble correlation for timing synchronization
+  \item[oversamp.m] : Oversampling and pulse shaping filters
+  \item[setstate0\_TX/RX.m] : USRP initialization and state reset
+\end{description}
+\end{tcolorbox}
+
+
+\section{Development Methodology and Lessons Learned}
+
+\subsection{Iterative Development Process}
+
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm]
+\color{black}
+\textbf{Project Development Cycle:}
+\begin{enumerate}[leftmargin=*,itemsep=0.15cm]
+  \item \textbf{Simulation:} Algorithm development and validation in MATLAB/Simulink
+  \item \textbf{Hardware Integration:} Porting to USRP drivers and real-time constraints
+  \item \textbf{Bench Testing:} Validation with test signals in RF-isolated environment
+  \item \textbf{Over-the-Air Testing:} Evaluation in actual propagation conditions
+  \item \textbf{Performance Analysis:} Statistical evaluation of measured data
+  \item \textbf{Optimization:} Parameter tuning based on empirical results
+\end{enumerate}
+\end{tcolorbox}
+
+\subsection{Key Technical Challenges and Solutions}
+\begin{tcolorbox}[colback=white,colframe=black,boxrule=2pt,arc=0.5mm,title=\textcolor{accentyellow}{\textbf{Key Security Metrics}}]
+\color{black}
+\begin{description}[leftmargin=2.5cm,font=\textbf]
+  \item [Timing Misalignment:] Implemented coarse/fine synchronization with preamble correlation and feedback loops
+  \item [Frequency Offsets:] Developed pilot-based frequency correction with loop bandwidth optimization
+  \item [Channel Fading:] Applied equalization
+  \item [Cross-Device Sync:] Distributed reference clocks and GPS time tagging
+  \item [Real-Time Performance:] Optimized code for USRP's real-time 
+\end{description}
+\end{tcolorbox}
+
+
+
+

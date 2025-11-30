@@ -1,0 +1,290 @@
+\chapter{Python Examples}
+\section{OFDM implementation}
+
+This section discusses some important code blocks and functions used in the implementation of OFDM in pySDR on a single Adalm Pluto device.
+
+
+% ============================================================================
+\section{Pilot Symbol Generation}
+
+\DndSpellHeader%
+  {pilot\_set()}
+  {Pilot Initialization}
+  {OFDM\_mask, power\_scaling}
+  {Transmitter}
+  {PyTorch}
+  {QPSK Pilots Only}
+
+\begin{lstlisting}
+def pilot_set(OFDM_mask, power_scaling=1.0): ###S
+# Define QPSK pilot values
+pilot_values = torch.tensor([-0.7 - 0.7j, -0.7 + 0.7j, 0.7 - 0.7j, 0.7 + 0.7j]) * power_scaling
+
+# Count the number of pilot elements in the OFDM_block mask
+num_pilots = OFDM_mask[OFDM_mask == 2].numel()
+
+# Create and return a list of pilot values repeated to match the number of pilots
+return pilot_values.repeat(num_pilots // 4 + 1)[:num_pilots]
+\end{lstlisting}
+
+This code sets the pilots for QPSK modulation. In this OFDM implementation, every
+subcarrier is modulated by QPSK modulation. These pilots will later serve the
+purpose of timing synchronization and channel estimation.
+
+% ============================================================================
+\section{OFDM Frame Generation}
+
+\DndSpellHeader%
+  {create\_OFDM\_data()}
+  {OFDM Frame Generator}
+  {None}
+  {Transmitter}
+  {IFFT, RE mapping, CP addition}
+  {Fixed FFT size and CP}
+
+\begin{lstlisting}
+def create_OFDM_data():
+pdsch_bits, pdsch_symbols = create_payload(OFDM_mask, Qm, mapping_table_Qm, power=1) # create PDSCH data and modulate it
+Modulated_TTI = RE_mapping(OFDM_mask, pilot_symbols, pdsch_symbols, plotOFDM_block=True) # map the PDSCH and pilot symbols to the TTI
+TD_TTI_IQ = IFFT(Modulated_TTI) # perform the FFT
+TX_Samples = CP_addition(TD_TTI_IQ, S, FFT_size, CP) # add the CP
+if use_sdr:
+    zeros = torch.zeros(leading_zeros, dtype=TX_Samples.dtype) # create leading zeros for estimating noise floor power
+    TX_Samples = torch.cat((zeros, TX_Samples), dim=0) # add leading zeros to TX samples
+return pdsch_bits, TX_Samples
+
+pdsch_bits, TX_Samples = create_OFDM_data()
+\end{lstlisting}
+
+This code block generates the symbol frames for ofdm transmission. The bits are
+mapped to complex symbols by QPSK modulation through mapping table, where the
+function RE mapping, is used to allocate pilot and data symbols. After completing
+the mapping, the next step is to add cyclic prefix.
+
+% ============================================================================
+\section{Transmission Using Pluto SDR}
+
+After initialization and setting up the Pluto SDR, the next step is to transmit
+the ofdm frame.
+
+\DndSpellHeader%
+  {radio\_channel()}
+  {RF Transmission Interface}
+  {tx\_signal, tx\_gain, rx\_gain, ch\_SINR}
+  {Transmitter--Receiver}
+  {Pluto SDR / Channel Model}
+  {Cyclic Transmission Enabled}
+
+\begin{lstlisting}
+def radio_channel(use_sdr, tx_signal, tx_gain, rx_gain, ch_SINR):
+if use_sdr:
+    if randomize_tx_gain:
+        tx_gain = random.randint(tx_gain_lo, tx_gain_hi) 
+        # add random gain to the TX gain
+    SDR_1.SDR_gain_set(tx_gain, rx_gain)
+    # set the gains
+    print("TX Gain: ", tx_gain, ", RX Gain: ", rx_gain)
+    SDR_1.SDR_TX_send(SAMPLES=tx_signal, max_scale=TX_Scale, cyclic=True) 
+    # start transmitting the symbols in cyclic mode
+    time.sleep(0.2) 
+    # Transmit for 500ms longer
+    rx_signal = SDR_1.SDR_RX_receive(len(tx_signal)*4) 
+    # receive the signal with 4 times more samples than the length of the transmitted signal.
+    SDR_1.SDR_TX_stop() 
+    # stop the transmission
+else:
+    rx_signal, h = 
+        apply_multipath_channel_dop(tx_signal, 
+           max_n_taps=n_taps, 
+           max_delay=max_delay_spread, 
+           random_start=True, 
+           repeats=3, 
+           SINR=ch_SINR, 
+           leading_zeros=leading_zeros,
+           fc=SDR_TX_Frequency, 
+           velocity=velocity,
+           fs=SampleRate,
+           randomize=False)
+    print(h)
+return rx_signal
+
+RX_Samples = radio_channel(use_sdr=use_sdr, tx_signal = TX_Samples, tx_gain = tx_gain, rx_gain = rx_gain, ch_SINR=ch_SINR)
+\end{lstlisting}
+
+This code block transmits the desired symbols through pluto and recieves the
+adequate amount of symbols. If cyclic = True, the SDR transmits indefinitely
+until the buffer is destroyed, we would want that condition, since we want to
+receive for multiple cycles and get the best possible result. It is worth noting
+to add a sleep time(within 1 sec) to let the SDR carry on with it's buffer
+synchronization and some hardware works, not adding this sleep would cause the
+code to fail and give incorrect results.
+
+% ============================================================================
+\section{Frame Synchronization}
+
+\DndSpellHeader%
+  {sync\_iq()}
+  {Frame Synchronization}
+  {tx\_signal, rx\_signal, leading\_zeros}
+  {Receiver}
+  {Cross-correlation}
+  {Known Transmitted Frame}
+
+\begin{lstlisting}
+def sync_iq(tx_signal, rx_signal, leading_zeros, threshold_factor=6):
+tx_len = tx_signal.numel()
+rx_len = rx_signal.numel()
+end_point = rx_len - tx_len
+rx_signal = rx_signal[leading_zeros:end_point]
+
+corr_result_real = tFunc.conv1d(rx_signal.real.view(1, 1, -1), tx_signal.real.view(1, 1, -1)).view(-1)
+corr_result_imag = tFunc.conv1d(rx_signal.imag.view(1, 1, -1), tx_signal.imag.view(1, 1, -1)).view(-1)
+correlation = torch.complex(corr_result_real, corr_result_imag).abs()
+
+threshold = correlation.mean() * threshold_factor
+
+i_maxarg = torch.argmax(correlation).item() + leading_zeros
+
+# Find the first index where correlation exceeds threshold
+for i, value in enumerate(correlation):
+    if value > threshold:
+        sync_index = i
+        break
+else:
+    sync_index = 0
+
+return sync_index + leading_zeros, i_maxarg, correlation, threshold
+\end{lstlisting}
+
+This function is used for frame synchronization. This method can only be used
+when you already know the transmitted frame, since there is no barker/preamble
+sequence used. The code finds cross correlation between iq samples of received and
+transmitted frames to find where the reception is starting. We have to set a
+particular threshold above which we know that the pilot signals have been
+detected. i.e this code block particularly points us to where the first preamble
+detection happens. So, after this detection, we would know where our symbols (i.e
+data symbols, pilot symbols within the blocks and cyclic prefixes) start. It is
+worth noting that, this is different from timing synchronization, this tells us
+where sampling indices inside an ofdm symbol/single carrier.
+
+% ============================================================================
+\subsection{Cyclic Prefix Removal}
+
+The next step is cyclic prefix (CP) removal. Once frame synchronization is
+completed and the start of each OFDM symbol is known, this step becomes
+straightforward. For every received OFDM symbol, we simply discard (or mask out)
+the first $N_{\text{CP}}$ samples corresponding to the cyclic prefix and retain
+the following $N_{\text{FFT}}$ samples, which contain the useful data portion of
+the symbol.
+
+% ============================================================================
+\subsection{Channel Estimation and equalization}
+
+Since the wireless channel inherently introduces several distortions to the
+transmitted signal, such as attenuation, phase shift, multi path fading, and
+frequency-selective distortion, it is necessary to estimate and compensate for
+these anomalies at the receiver. This process is one of the most critical steps
+in a digital communication system.
+
+\begin{equation}
+Y[k] = H[k]X[k] + W[k],
+\end{equation}
+
+Channel estimation refers to the process of estimating the unknown channel
+response \(H[k]\). At pilot subcarriers, where the transmitted symbols
+\(X_p[k]\) are known at the receiver, the channel is estimated using the least
+squares (LS) estimator as
+
+\begin{equation}
+\hat{H}_p[k] = \frac{Y_p[k]}{X_p[k]}.
+\end{equation}
+
+This estimation cannot be performed on all subcarriers since the transmitted data
+symbols are unknown at the receiver. Therefore, pilot symbols are inserted at
+certain known subcarriers. The channel is first estimated at these pilot
+locations and then interpolated across the frequency axis to obtain the channel
+estimate over the entire frame.
+
+Once the channel has been estimated, equalization is performed to recover the
+transmitted data symbols using
+
+\begin{equation}
+\hat{X}[k] = \frac{Y[k]}{\hat{H}[k]}.
+\end{equation}
+
+In this implementation, linear interpolation is used to estimate the channel
+values between two pilot subcarriers. The interpolation is given by
+
+\begin{equation}
+\boxed{
+\hat{H}(k) = \hat{H}(k_1) +
+\frac{\hat{H}(k_2) - \hat{H}(k_1)}{k_2 - k_1}
+(k - k_1)
+}
+\end{equation}
+
+where \(k_1\) and \(k_2\) denote two adjacent pilot subcarrier indices.
+
+Once this step is done, we need to remove the guard bands from the recievd
+signal, later we perform zero forcing which is the equalization step. After
+estimating the channel frequency response, the effect of the wireless channel
+must be removed from the received signal in order to recover the transmitted data
+symbols. This process is known as \textit{equalization}. In this work,
+Zero-Forcing (ZF) equalization is employed.
+
+\begin{equation}
+Y[k] = H[k]X[k] + W[k],
+\end{equation}
+
+The Zero-Forcing equalizer compensates for the channel by directly inverting the
+estimated channel response. The transmitted symbol is recovered as
+
+\begin{equation}
+\boxed{
+\hat{X}[k] = \frac{Y[k]}{\hat{H}[k]}
+}
+\end{equation}
+
+The estimated channel can be represented in polar form as
+
+\begin{equation}
+\hat{H}[k] = |\hat{H}[k]| e^{j\angle \hat{H}[k]}.
+\end{equation}
+
+Using this representation, the ZF equalization can also be expressed as
+
+\begin{equation}
+\boxed{
+\hat{X}[k] = \frac{Y[k]}{|\hat{H}[k]|} e^{-j\angle \hat{H}[k]}
+}
+\end{equation}
+
+Since the channel phase may contain discontinuities due to phase wrapping in
+the range \([-\pi, \pi]\), phase unwrapping is applied prior to phase compensation
+to ensure smooth phase correction across the subcarriers.
+
+\begin{equation}
+\hat{X}[n,k] = \frac{Y[n,k]}{\hat{H}[k]}, \quad n = 0,1,\dots,S-1,\;
+k = 0,1,\dots,F-1,
+\end{equation}
+
+The output of the ZF equalizer produces constellation points that are ideally
+clustered around their original QAM symbol locations, thereby enabling accurate
+symbol detection and demodulation.
+
+% ============================================================================
+\subsection{Demapping step and BER calculation}
+
+Once the channel estimation, guard band removal, equalization is completed, we
+can now extract the data symbols from the frame using a demapping function. Which
+maps the complex symbols into data. And this is the final step of the OFDM
+communication pipeline.
+\subsection{Important Notes}
+\begin{itemize}
+    \item This code only works for the offline setup, i.e requires the knowledge of transmitted symbols, since we use these to complete frame synchronization. 
+    \item In any case, when ever running transmitter and reciever together, it is suggested to introduce a sleep time (in order of 1 second) so that you let the hardware synchronize.
+    \item Since the original code contained some errors, we tried to change as much as possible and suggest the readers to change the errors try to implement an online version of the code though this involves making significant changes to the source code, we tried and failed to do so.
+    Some of the things we tried are as follows:
+    \item For the real-time implementation, the initial idea was to remove buffer-destruction steps and enable continuous transmission with live plotting. This was later replaced by a buffer-wise processing approach that applied the same offline pipeline sequentially to each buffer. PyQt was initially considered for real-time visualization but was dropped due to its complexity, and Matplotlib was used instead. Since Matplotlib is blocking by default, interactive mode using plt.ion() was required for non-blocking visualization.
+    \item Once real-time spectral visualization was achieved, synchronization on a per-buffer basis became the next challenge. A workaround involving zero-padding before each buffer was tested, wherein correlation was computed only on the valid samples. While this worked for the first buffer with an SINR of 15–20 dB, all subsequent buffers failed, with the SINR dropping to zero, demonstrating the impracticality of this approach.
+\end{itemize}

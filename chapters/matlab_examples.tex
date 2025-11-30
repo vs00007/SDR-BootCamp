@@ -1,0 +1,54 @@
+\chapter{MATLAB Examples}
+\ChapterCredits{
+  Vemula Siddhartha,
+  Mihir Divyansh
+}
+\section{Example 1: (M)PSK}
+\subsection{PSK 101}
+Phase-shift keying (PSK) is a digital modulation process which conveys data by changing (modulating) the phase of a constant frequency carrier wave, is what Wikipedia says. In simple words, M-PSK clubs $\log_2 M$ bits of the incoming data stream and maps them to one of the M symbols, which are symmetrically along the unit circle (you probably already know this by now). \newline 
+The mapping is usually done using Gray code, so that neighbouring symbols differ by only \textbf{one} bit. This ensures the Bit Error Rate (BER) and makes the system more robust to noise.
+\subsection{MATLAB Implementation}
+The primer is all you need to know to code up both the M-PSK modulator and the demodulator. But it's simply not that simple.
+\subsubsection{The dataflow pipeline}
+The Tx buffer is first filled with the modulated signal. You can oversample if you want (for the overachievers, look up why we oversample! it is actually pretty interesting). This oversampled signal is then passed through an RRC (Root Raised Cosine) Filter. After that, the Tx object is called with this buffer (using the "repeat" mode to make your lives easier). \\
+% The Rx side is where the real fun begins, so brace yourselves.
+% \\
+% We cannot directly detect when we start receiving the actual transmitted signal. Thus, we need some way to know when we need to start considering the bits in the Rx buffer. We achieve this by appending a Barker sequence (look this up as well :) at the start of every frame of the transmit signal. 
+% \newline
+% We correlate the received stream with this known Barker sequence. The point where the correlation peaks tells us exactly where the actual data begins. Once we detect this peak, we can align our frame properly and start processing the received samples from that point onward.
+On the Rx side, the real fun begins. The received waveform is first stabilized in amplitude so that the rest of the processing chain doesn't have to deal with sudden power jumps. After that, we pass it through the matched RRC filter, which pairs with the transmit-side RRC to give the classic Raised Cosine response.
+
+Once the filtering is done, we start fixing all the synchronization issues introduced during transmission. The first step is to correct the carrier frequency offset coarsely (CFO) so that the signal is at least rotating in roughly the right direction. Then, we find out the correct sampling instants (timing synchronization), i.e., when we should correctly sample for each symbol. After that, we remove any remaining phase offset (FFO) so that the constellation finally settles instead of slowly rotating.
+
+With timing and phase offset accounted for, we still face one big problem: the receiver has no idea where the actual frame of data starts. To solve this, we prepend a Barker sequence (look this up as well!) at the transmitter and correlate the received samples with this known pattern. The peak of this correlation tells us when the frame starts exactly, and from this point onward we know which samples actually correspond to the actual transmitted signal.
+
+Once the frame is aligned, we demodulate the bits. Each point is mapped back to its nearest M-PSK symbol, and this is the transmitted signal recovered successfully (yay!). We can now find BER if the signal is previously known, or do anything else with this.
+
+\subsection{Exercise}
+Build a $\dfrac{\pi}{4}$-QPSK communication system. (You can use Simulink blocks if neeeded as well).
+\textcolor{red}{Bonus points if you can build an M-PSK system (parameterized by M).}
+
+\section{Example 2: OFDM}
+\subsection{OFDM 101}
+OFDM is a clever way to modulate your information. Instead of sending everything on one high-rate carrier, we break the data into multiple slower streams and send each of them on a different subcarrier. But these subcarriers are cleverly chosen such that they are orthogonal, so none of the streams interfere with one another.
+
+Here's how we do this. We modulate the data bits and assign one symbol to each of the subcarriers in the \emph{frequency} domain. Here's another fun fact, you can use different modulation schemes for different subcarriers, in fact this is what makes OFDM so cool. Apart from being cool, this serves another purpose of increasing the overall performance of our system even in frequency selective fading channels.(Think about how this helps us!).
+
+After assigning one symbol to each subcarrier, since we are in the frequency domain, we take the IFFT of the symbol vector, which gives us the time domain representation of the signal, which is the OFDM symbol that we actually transmit. Coincidentally (or cleverly, up to debate), IFFT inherently generates subcarriers that are perfectly orthogonal as required (verify!), so we do not have to do anything extra. (May the Math be with you!).
+
+Before transmission, we add a cyclic prefix (CP) (look it up please). CP turns complicated convolution (in time domain) into simple complex scaling on each subcarrier (in frequency domain). This simplifies the equalization procedure at the receiver. It is now just division by channel gain at each subcarrier. 
+
+At the receiver, we do the same thing, but in reverse. After removing the CP, we take the FFT and go back to the frequency domain. Each subcarrier now has a noisy, channel-affected version of the original symbol, which we then equalize and demodulate independently. Channel estimation is something which has to be done though. Pilots are used for estimation. Channel estimation is very interesting (similar to many of the ML models for the ML geeks), please refer to credible online sources for more information (definitely not because we're lazy).
+
+\subsection{MATLAB Implementation}
+
+MATLAB implementation of OFDM is quite involved. Each Tx frame has a sequence of 10 short preamble sequences, followed by a long preamble sequence (along with its CP) to which the data payload symbols (time domain version, along with their CP) are appended. The frame is then oversampled and passed through a RRC filter as before. While transmitting ensure that the Tx buffer is not underrun.
+
+On the receiver side, we essentially undo everything the transmitter did, but with a few extra steps to deal with noise, CFO, and timing uncertainty. The first task is packet detection. Since we don’t know where in the received stream the frame begins, we correlate the received signal with the known short preamble sequence. Once this correlation spikes and stays above it for long enough, we declare that the frame has started and start further processing from there.
+
+Next, we downsample by the same oversampling factor used at the transmitter so that we recover the symbol-rate samples. With these properly aligned samples, we estimate and correct the carrier frequency offset coarsely first using the short preambles. This removes most of the rotation in the received signal. Then, finer CFO estimate is then computed using the long preamble, which brings the  constellation much closer to where it should ideally be. We also use the long preamble to for channel estimation.
+
+After the preambles are processed, we tinker with the main payload symbols. Each of them is converted to the frequency domain using the FFT and the pilots (placed at fixed subcarriers) are used to estimate the channel taps. These pilot-based estimates are extrapolated to the full set of subcarriers and are used to equalize the data symbols at each of them. After the pilot subcarriers are removed, the remaining data subcarriers are demodulated according to the modulation scheme for each subcarrier, which gives us back the actual transmitted signal.
+
+\subsection{Exercise}
+Implement and contrast between an OFDM system with $N=64$ and $N=128$ orthogonal subcarriers. 

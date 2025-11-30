@@ -1,0 +1,133 @@
+\chapter{TX and RX semantics}
+\ChapterCredits{
+  Mihir Divyansh E,
+  Vemula Siddhartha
+}
+
+
+\section{Overview}
+
+After understanding the hardware architecture and the digital data flow of the PlutoSDR, it becomes necessary to examine how the system is exposed through the MATLAB programming interface. While MATLAB provides simple transmit and receive system objects (\texttt{sdrtx} and \texttt{sdrrx}), their behavior is often misunderstood by noobs who implicitly assume synchronous, command-driven operation.
+
+This chapter explains how the MATLAB interface interacts with the underlying buffered streaming architecture. Rather than documenting individual properties or parameters, the focus here is on \emph{behavioral semantics}: what MATLAB guarantees, what it does not, and how transmit and receive operations interact when executed concurrently.
+
+\begin{DndReadAloud}
+  MATLAB controls streams, not events. If thee expecteth immediate action, thee art good now too late.
+\end{DndReadAloud}
+
+\section{Transmit Object}
+
+The transmit system object represents a producer endpoint (fancy way of saying source, I recently read about dataflow) into the PlutoSDR transmit data pipeline. When a user invokes:
+
+\begin{lstlisting}[language=Matlab]
+tx(txData);
+\end{lstlisting}
+
+this call should not be interpreted as an instruction to transmit the specified samples immediately. Instead, it enqueues the provided data into a sequence of buffers that will eventually feed the RF hardware.
+
+Conceptually, the transmit path proceeds as follows:
+\begin{enumerate}
+  \item MATLAB validates the input data and performs any required datatype conversion.
+  \item The data is copied into host-side buffers managed by the support package.
+  \item USB bulk transfers deliver the data to the PlutoSDR device.
+  \item The Processing System stores the samples in transmit buffers.
+  \item The Programmable Logic and AD9361 consume samples when available.
+\end{enumerate}
+
+If samples already exist in the transmit pipeline, they will be transmitted before any newly enqueued data. MATLAB provides no mechanism to preempt or flush data once it has entered the pipeline. As a result, \texttt{tx(data)} should be understood as a buffering operation, not a timing command.
+
+\section{Receive Object}
+
+The receive system object represents a consumer endpoint (data sink) that retrieves data from the continuously operating receive pipeline. A call of the form:
+
+\begin{lstlisting}[language=Matlab]
+rxData = rx();
+\end{lstlisting}
+
+does not initiate RF sampling. Reception is continuous as long as the receiver is enabled. The call merely retrieves the next available block of samples that has already been captured and buffered.
+
+The samples returned:
+\begin{itemize}
+  \item Were acquired sometime in the past
+  \item Have already traversed all buffering layers
+  \item Form a contiguous segment of the receive stream
+\end{itemize}
+
+If no samples are available, the call blocks until sufficient data has accumulated. If buffers overflow before data is retrieved, samples are dropped silently before reaching MATLAB.
+
+\section{Concurrent Transmit and Receive Operation}
+
+When transmit and receive objects are used simultaneously, they operate as two independent streaming pipelines sharing only hardware clocking and RF resources.
+
+Key properties of concurrent operation include:
+\begin{itemize}
+  \item Transmit operations do not pause or synchronize with receive operations.
+  \item Receive operations do not reflect immediate transmit updates.
+  \item Both pipelines run continuously and asynchronously.
+\end{itemize}
+
+Transmit updates propagate forward through buffered stages, while receive samples propagate backward to the host through a separate buffered chain. There is no transactional relationship between a transmitted buffer and a received buffer at the MATLAB level.
+
+\section{Updating TX While RX Is Active}
+
+A common scenario involves updating the transmit waveform while recording received samples. In this case:
+
+\begin{itemize}
+  \item The receiver continues sampling without interruption.
+  \item Received data may contain portions corresponding to both the old and new transmit waveforms.
+  \item The transition point is not sample-aligned or precisely identifiable in host-visible time.
+\end{itemize}
+
+This behavior is neither a race condition nor incorrect operation. It reflects the intentional decoupling between software control flow and RF timing introduced by buffering and operating system scheduling.
+
+\section{Ordering Guarantees}
+
+The MATLAB interface provides the following guarantees:
+\begin{itemize}
+  \item Transmit samples are emitted in the order they are enqueued.
+  \item Receive samples are delivered in the order they were captured.
+  \item Within each buffer, samples are contiguous and correctly ordered.
+\end{itemize}
+However, MATLAB does not guarantee:
+\begin{itemize}
+  \item When a given transmit buffer reaches the RF output
+  \item Alignment between transmit updates and receive buffer boundaries
+  \item Deterministic latency from function call to RF emission
+  \item Sample-accurate TX--RX synchronization at the host
+\end{itemize}
+
+
+\section{A Practical Mental Model}
+
+The most accurate way to reason about the MATLAB interface is to treat the transmit and receive objects as controlling long-lived data streams.
+
+Transmit operations keep the pipeline supplied with samples. Receive operations drain the pipeline at a user-defined rate. The system behaves predictably when both streams are serviced steadily and unpredictably when they are driven in bursts or with strict timing expectations.
+
+\begin{DndReadAloud}
+If thy designeth depends on exact timing, MATLAB is the wrong placeth to enf'rce t.
+\end{DndReadAloud}
+
+\section{Open Ended Exercises}
+\begin{enumerate} 
+\item \textbf{Measuring Pipeline Latency} Design an experiment to measure the end-to-end latency from calling \texttt{tx(txData)} to RF emission. Your approach should account for the fact that you cannot directly observe when samples leave the DAC. Consider: 
+\begin{itemize} \item What signal characteristics would make the transmitted waveform identifiable in a received capture? 
+\item How would buffer sizes at each stage affect your measurement precision? \item Can you distinguish between minimum latency, average latency, and jitter? \end{itemize} 
+Implement your method and report whether the latency remains constant across different sample rates and buffer sizes. 
+\item \textbf{Characterizing the Transition Region} When updating a transmit waveform during active reception, the text states that "the transition point is not sample-aligned or precisely identifiable." Design an experiment to characterize this transition: 
+\begin{itemize} \item How would you construct two transmit waveforms that make the transition clearly visible in received data? 
+\item Is the transition sharp (within a few samples) or gradual (spanning hundreds or thousands of samples)? 
+\item Does the transition behavior change with sample rate or buffer configuration? 
+\item Under what conditions, if any, can you predict where in the RX stream the transition will appear? 
+\end{itemize} 
+\item \textbf{Consequences of Buffering Asymmetry} The TX and RX paths have independent buffer hierarchies of potentially different depths. Suppose the TX pipeline can hold 100ms of samples while the RX pipeline holds only 20ms: 
+\begin{itemize} 
+\item How would this asymmetry manifest in a loopback experiment where TX output is connected to RX input? 
+\item Design a MATLAB script that intentionally causes TX underrun and RX overflow. Can you observe both failure modes simultaneously? What does this reveal about how MATLAB services the two streams? 
+\item If you send a burst transmission (finite-length waveform followed by silence), how long after the \texttt{tx()} call returns will the RF output actually go silent? 
+\end{itemize} 
+\item \textbf{Stream Synchronization Without Hardware Triggers} Given that MATLAB provides no sample-accurate TX--RX synchronization, propose a software-only method to achieve approximate alignment sufficient for these applications: \begin{itemize} \item A radar system requiring alignment within 10 sample periods 
+\item A communication protocol requiring alignment within 1ms 
+\item A frequency-hopping system where TX and RX must change frequency "simultaneously" 
+\end{itemize} 
+For each case, identify whether your method relies on statistical averaging, specific waveform properties, or calibration measurements. What fundamental limit prevents perfect synchronization at the MATLAB level? 
+\end{enumerate}

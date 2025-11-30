@@ -1,0 +1,244 @@
+\chapter{Multithreading on SDR using python}
+
+\section{Concurrency Matters}
+
+Software-defined radio hardware operates continuously and independently of host software execution. Samples arrive at the receiver at a fixed rate, and the transmitter consumes samples at a fixed rate once enabled. Any software interface interacting with such hardware must therefore service transmit and receive paths reliably and with minimal interruption.
+    
+    When transmit generation, receive handling, and signal processing are all executed in software, a fundamental challenge arises: software execution is discrete and scheduled, while RF streaming is continuous. Concurrency mechanisms are introduced not to reduce latency, but to ensure that no part of the streaming pipeline is starved while other tasks execute.
+
+\section{MATLAB Limitations}
+
+MATLAB executes user code in a single-threaded manner. Although certain internal routines may leverage multi-core hardware, user scripts and functions execute sequentially on a single execution thread. As a result, transmit and receive operations cannot be serviced concurrently by user code.
+
+When a MATLAB script calls \texttt{rx()}, control remains within that call until the requested samples are returned. While MATLAB is processing received data or generating a new transmit waveform, it is not servicing the opposite data path. Any tolerance to this interruption is provided solely by the buffering hierarchy discussed in the previous chapters.
+
+These issues cannot be resolved through MATLAB language constructs alone.
+
+\section{Python Execution Model}
+
+Python, unlike MATLAB, provides explicit support for multithreading through its standard library. This enables a different programming style when interacting with SDR hardware.
+
+However, Python introduces its own constraint: the Global Interpreter Lock (GIL). The GIL ensures that only one Python thread executes Python bytecode at a time. As a result:
+
+\begin{itemize}
+  \item CPU-bound Python code does not execute in parallel
+  \item But, I/O-bound operations \emph{can} overlap in time
+\end{itemize}
+
+\subsection{Python Threading for SDR}
+
+Most SDR I/O operations—such as USB transfers, DMA reads, or calls into libiio—block while waiting for hardware or kernel services. During these periods, the Python interpreter releases the GIL. This allows other threads to run.
+
+Consequently, Python threading is effective for SDR applications because:
+
+\begin{itemize}
+  \item RX threads can block on incoming samples without consuming CPU
+  \item TX threads can independently generate or push samples
+  \item Processing threads can operate whenever data is available
+\end{itemize}
+
+Although Python threads do not improve computational throughput, they allow independent servicing of TX and RX pipelines, reducing the likelihood of buffer starvation.
+
+\section{Typical Threaded SDR Architecture in Python}
+
+A common and effective structure uses three logical threads:
+
+\begin{itemize}
+  \item \textbf{RX thread}: continuously retrieves samples and places them into a queue
+  \item \textbf{Processing thread}: consumes samples from the RX queue and performs signal processing
+  \item \textbf{TX thread}: generates or updates transmit samples and pushes them to the hardware
+\end{itemize}
+
+Communication between threads is handled using thread-safe queues. This decouples the timing of I/O from computation:
+
+\begin{itemize}
+  \item If processing slows down, RX samples accumulate in memory buffers
+  \item If processing speeds up, RX samples are consumed more quickly
+  \item TX operation proceeds independently, subject to its own buffering constraints
+\end{itemize}
+
+This architecture directly mirrors the hardware buffer hierarchy at the software level.
+
+\section{Threads vs.\ Processes}
+
+For computationally intensive signal processing, Python threads may become a bottleneck due to the GIL. In such cases, Python processes (\texttt{multiprocessing}) can be used to achieve true CPU parallelism.
+
+However, processes introduce additional overhead due to inter-process communication and data copying. For high-rate SDR data streams, careful design is required to avoid replacing one bottleneck with another.
+
+A common compromise is:
+
+\begin{itemize}
+  \item Threads for I/O-bound tasks (TX and RX streaming)
+  \item Processes for compute-heavy tasks (decoding, estimation, classification)
+\end{itemize}
+
+\section{Bonus: Advanced Concurrency}
+
+The material so far focuses on threading as a practical tool for keeping SDR data streams serviced reliably. This section briefly introduces more advanced concepts for readers who wish to explore the limits of concurrency, latency, and determinism in SDR systems.
+
+\subsection{Backpressure and Flow Control}
+
+In threaded SDR applications, it is common for one stage to operate slower than another. For example, processing may lag behind reception, causing RX queues to grow.
+
+This situation introduces the concept of \textbf{backpressure}: a downstream component signaling to upstream components to slow down or pause. In most Python-based SDR systems, backpressure is implicit rather than explicit:
+\begin{itemize}
+  \item RX queues grow until memory pressure increases
+  \item TX updates are delayed rather than precisely scheduled
+\end{itemize}
+
+Understanding where backpressure exists: hardware buffers, software queues, or OS-managed resources—is essential when diagnosing instability in long-running SDR experiments.
+
+\subsection{Queue Sizing and Memory Trade-offs}
+
+Thread-safe queues decouple timing but consume memory. Large queues improve tolerance to processing delays but increase latency and memory footprint. Small queues reduce latency but increase the likelihood of overflow or dropped samples.
+
+There is no universally optimal queue size. You should ideally choose queue depths based on:
+\begin{itemize}
+  \item Sample rate
+  \item Worst-case processing time
+  \item Acceptable end-to-end latency
+\end{itemize}
+
+\subsection{Timing Visibility and Illusions of Synchronization}
+
+Threading often creates an illusion of simultaneity: RX data is being acquired “while” TX updates occur. In reality, all host-level operations remain decoupled from the RF clock by multiple buffering stages.
+
+\subsection{Thread Failures and Silent Degradation}
+
+Threaded SDR programs often fail silently. A stalled RX thread may block indefinitely without raising an exception. A TX thread may continue transmitting stale data indefinitely.
+
+You should
+\begin{itemize}
+  \item Monitor queue occupancy
+  \item Check for stalled threads
+  \item Explicitly log underrun/overrun indicators
+\end{itemize}
+
+Without such instrumentation, apparent signal anomalies may be incorrectly attributed to RF effects rather than software failure modes.
+
+\begin{DndReadAloud}
+Concurrency bugs are rarely loud.
+\end{DndReadAloud}
+
+\subsection{Example: Threaded TX/RX with Queues}
+
+The following example shows you the general method to use threads in python. It uses separate threads for receive, processing, and transmit paths, connected through thread-safe queues. This code is not supposed to work, but is aimed to help you write your own program
+
+\begin{lstlisting}[language=Python]
+import threading
+import queue
+import numpy as np
+import adi
+import time
+
+# Create SDR object
+sdr = adi.Pluto("ip:192.168.2.1")
+sdr.sample_rate = int(1e6)
+sdr.rx_rf_bandwidth = int(1e6)
+sdr.tx_rf_bandwidth = int(1e6)
+sdr.rx_lo = int(2.4e9)
+sdr.tx_lo = int(2.4e9)
+
+# Thread-safe queues
+rx_queue = queue.Queue(maxsize=50)
+tx_queue = queue.Queue(maxsize=20)
+
+running = True
+
+def rx_thread():
+    while running:
+        samples = sdr.rx()
+        try:
+            rx_queue.put(samples, timeout=0.1)
+        except queue.Full:
+            # RX backpressure
+            pass
+
+def processing_thread():
+  while running:
+    try:
+      rx_samples = rx_queue.get(timeout=0.1)
+    except queue.Empty:
+      continue
+  
+    # Simulate signal processing
+    time.sleep(0.01)  
+    # 10 ms processing delay
+  
+    # Generate new TX waveform based on RX
+    tx_samples = np.exp(2j * np.pi * 100e3 *
+               np.arange(len(rx_samples)) / sdr.sample_rate)
+    tx_samples *= 2**14
+  
+    try:
+      tx_queue.put(tx_samples, timeout=0.1)
+    except queue.Full:
+      pass
+
+def tx_thread():
+  while running:
+     try:
+       tx_samples = tx_queue.get(timeout=0.1)
+       sdr.tx(tx_samples)
+     except queue.Empty:
+       pass
+
+# Launch threads
+threads = [
+    threading.Thread(target=rx_thread, daemon=True),
+    threading.Thread(target=processing_thread, daemon=True),
+    threading.Thread(target=tx_thread, daemon=True),
+]
+for t in threads:
+    t.start()
+
+# Run for a fixed time
+time.sleep(10)
+running = False
+\end{lstlisting}
+
+\paragraph{What This Example Demonstrates}
+
+\begin{itemize}
+  \item RX, processing, and TX are serviced independently
+  \item Slow processing does not immediately stop RX
+  \item TX continues even if RX momentarily stalls
+  \item Buffers (queues) absorb timing variation
+\end{itemize}
+
+The example does \emph{not} guarantee deterministic timing. Transmit updates occur whenever buffers and scheduling allow, not at precisely defined instants relative to RX events.
+
+\section{Exercises}
+
+The questions are designed to force reasoning about system behavior rather than produce a single correct answer.
+
+\subsection*{Exercise 1: Illusion of Parallelism}
+
+Design a Python program with separate RX and TX threads. Measure:
+\begin{itemize}
+  \item Average RX throughput
+  \item TX buffer refill interval
+\end{itemize}
+
+Now insert a CPU-heavy operation in the processing thread. What happens to the throughput.
+
+\subsection*{Exercise 2: Queue Depth Experiment}
+
+Implement a threaded RX pipeline with a bounded queue. Repeat the experiment with three queue sizes:
+\begin{itemize}
+  \item Very small (a few frames)
+  \item Moderate (hundreds of frames)
+  \item Very large (thousands of frames)
+\end{itemize}
+
+For each case, observe latency, memory usage, and failure modes under artificial processing delays.
+
+\subsection*{Exercise 3: Detecting Silent Failure}
+
+Modify a threaded SDR application so that the RX thread intentionally stops without notifying the TX or processing threads. Devise a method to detect this condition automatically using only timing, counters, or queue statistics.
+
+What does this exercise suggest about the importance of explicit health checks in SDR software?
+
+\begin{DndReadAloud}
+If a system only works when everything is fast, it is not concurrent—it is precarious.
+\end{DndReadAloud}

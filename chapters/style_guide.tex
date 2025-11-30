@@ -1,0 +1,450 @@
+% ============================================================================
+% PLUTO SDR MANUAL - STYLE GUIDE AND COMMAND REFERENCE
+% ============================================================================
+% Keep this file handy while writing chapters!
+% Save as: style_guide.tex (for reference only, not compiled)
+% ============================================================================
+
+% ============================================================================
+% CHAPTER FILE STRUCTURE
+% ============================================================================
+% Each chapter file should NOT include document preamble or \begin{document}
+% Start directly with chapter content:
+
+\chapter{Your Chapter Title}
+
+\DndDropCapLine{F}{irst sentence of chapter} continues here with the rest
+of the introductory paragraph.
+
+% ============================================================================
+% SECTION COMMANDS
+% ============================================================================
+
+\section{Main Section}
+% Use for major topics within a chapter
+
+\subsection{Subsection}
+% Use for sub-topics within a section
+
+\subsubsection{Subsubsection}
+% Use for further divisions
+
+\paragraph{Paragraph Header}
+% Inline header, rarely used
+
+\subparagraph{Subparagraph Header}
+% Smaller inline header
+
+
+% ============================================================================
+% SPECIAL SECTION HEADERS
+% ============================================================================
+
+% For Feature/Capability Headers (like D&D feats):
+\DndFeatHeader{Feature Name}[Prerequisites or conditions]
+Description of the feature or capability.
+
+% Example:
+\DndFeatHeader{Buffer Optimization}[Requires: libiio 0.21+]
+When using kernel buffers larger than 256k samples, you gain advantage
+on throughput checks and reduce latency by 50\%.
+
+
+% For Item/Tool Headers (like magic items):
+\DndItemHeader{Tool Name}{Category, rarity/type}
+Description of the tool or component.
+
+% Example:
+\DndItemHeader{iio\_readdev}{Command-line tool, essential}
+This tool has unlimited uses per day. While using it, you can capture
+samples from any IIO device and redirect them to a file or pipe.
+
+
+% For Procedure/Function Headers (like spells):
+\DndSpellHeader%
+  {Function Name}
+  {Category or return type}
+  {Parameters}
+  {Scope}
+  {Dependencies}
+  {Constraints}
+Description of the function or procedure.
+
+% Example:
+\DndSpellHeader%
+  {iio\_buffer\_push()}
+  {ssize\_t return type}
+  {struct iio\_buffer *buf}
+  {User-space to kernel-space}
+  {libiio.h}
+  {Blocking until buffer space available}
+Transfers samples from user-space buffer to the kernel, making them
+available for transmission via the DAC.
+
+
+% ============================================================================
+% TEXT BOXES AND CALLOUTS
+% ============================================================================
+
+% READ ALOUD BOX - For important instructions or step-by-step procedures
+\begin{DndReadAloud}
+  To initialize your first buffer, you must first create an IIO context.
+  Connect to your Pluto SDR via USB and verify the device is enumerated
+  properly using lsusb. Only then can you proceed to buffer creation.
+\end{DndReadAloud}
+
+
+% COMMENT BOX - For tips, notes, and additional information
+% This is breakable across columns
+\begin{DndComment}{Tip: Buffer Sizes}
+  A |DndComment| is perfect for tips and notes. Always choose buffer
+  sizes that are powers of 2 for optimal DMA performance. Start with
+  4096 samples and adjust based on your application's latency requirements.
+\end{DndComment}
+
+
+% SIDEBAR - For related information, warnings, or deep dives
+% This is NOT breakable, best used with float positioning
+\begin{DndSidebar}[float=!t]{Understanding Sample Rates}
+  The AD9361 can operate at sample rates from 2.083 MSPS to 61.44 MSPS.
+  The actual achievable rate depends on your host interface (USB 2.0
+  limits you to approximately 4 MSPS sustained). Consider using Ethernet
+  for higher throughput applications.
+\end{DndSidebar}
+
+% Float options: !t (top), !b (bottom), !h (here)
+
+
+% ============================================================================
+% TABLES
+% ============================================================================
+
+% Basic table with automatic row coloring
+\begin{DndTable}[header=Table Title]{XX}
+  \textbf{Column 1} & \textbf{Column 2} \\
+  Data 1 & Data 2 \\
+  Data 3 & Data 4 \\
+  Data 5 & Data 6 \\
+\end{DndTable}
+
+% Column specifiers:
+% X = flexible width column (fills available space)
+% l = left-aligned fixed width
+% c = center-aligned fixed width
+% r = right-aligned fixed width
+% p{width} = paragraph column with specified width
+
+% Table with custom color
+\begin{DndTable}[header=IIO Attributes, color=PhbLightGreen]{lXc}
+  \textbf{Attribute} & \textbf{Description} & \textbf{R/W} \\
+  sampling\_frequency & Current sample rate in Hz & R/W \\
+  rf\_bandwidth & RF filter bandwidth in Hz & R/W \\
+  gain\_control\_mode & AGC mode: manual/fast/slow & R/W \\
+\end{DndTable}
+
+% Full-width table (spans both columns)
+\begin{table*}[t]
+  \begin{DndTable}[width=\linewidth, header=Buffer Functions]{lXX}
+    \textbf{Function} & \textbf{Purpose} & \textbf{Blocking} \\
+    iio\_buffer\_create() & Allocate buffer & No \\
+    iio\_buffer\_refill() & Receive samples & Yes \\
+    iio\_buffer\_push() & Transmit samples & Yes \\
+  \end{DndTable}
+\end{table*}
+
+
+% ============================================================================
+% CODE LISTINGS
+% ============================================================================
+
+% Inline code with vertical bars (already configured with \MakeShortVerb)
+Use the |iio_context_create()| function to initialize.
+
+% Code blocks - C language (default in main file)
+\begin{lstlisting}
+struct iio_context *ctx;
+struct iio_device *dev;
+struct iio_buffer *buf;
+
+ctx = iio_context_create_default();
+dev = iio_context_find_device(ctx, "cf-ad9361-lpc");
+buf = iio_device_create_buffer(dev, 4096, false);
+\end{lstlisting}
+
+% Code blocks - Python
+\begin{lstlisting}[language=Python]
+import iio
+
+ctx = iio.Context()
+dev = ctx.find_device("cf-ad9361-lpc")
+buf = iio.Buffer(dev, 4096)
+\end{lstlisting}
+
+% Code blocks - Bash/Shell
+\begin{lstlisting}[language=bash]
+iio_info
+iio_attr -a
+iio_readdev -s 4096 cf-ad9361-lpc > samples.dat
+\end{lstlisting}
+
+
+% ============================================================================
+% MAP REGIONS (for hierarchical structures)
+% ============================================================================
+
+% Use for documenting system architecture or signal flow
+\DndArea{IIO Device Hierarchy}
+The top-level structure containing all IIO devices.
+
+\DndSubArea{cf-ad9361-lpc (RX Device)}
+The receive path device with voltage channels.
+
+\DndSubArea{cf-ad9361-dds-core-lpc (TX Device)}
+The transmit path device with voltage output channels.
+
+\DndArea{Buffer Memory Regions}
+Memory allocation for sample buffers.
+
+\DndSubArea{Kernel Space DMA Buffer}
+Direct memory access region managed by the kernel driver.
+
+\DndSubArea{User Space Buffer}
+Application-accessible memory mapped from kernel space.
+
+
+% ============================================================================
+% MONSTER/COMPONENT STAT BLOCKS
+% ============================================================================
+
+% Use for detailed component or function specifications
+\begin{DndMonster}{AD9361 Transceiver}
+  \DndMonsterType{RF Transceiver IC (Analog Devices), highly configurable}
+  
+  \DndMonsterBasics[
+    armor-class = {Frequency Range: 70 MHz to 6 GHz},
+    hit-points  = {Bandwidth: 200 kHz to 56 MHz},
+    speed       = {Sample Rate: 2.083 to 61.44 MSPS},
+  ]
+
+  \DndMonsterAbilityScores[
+    str = 12, % TX Power
+    dex = 16, % Frequency Agility
+    con = 14, % Noise Figure
+    int = 18, % Programmability
+    wis = 15, % Filtering
+    cha = 13, % Spectrum Quality
+  ]
+
+  \DndMonsterDetails[
+    senses = {12-bit ADC, 12-bit DAC resolution},
+    languages = {SPI control interface, IIO subsystem},
+    challenge = Advanced,
+  ]
+
+  \DndMonsterAction{Receive Mode}
+  Configure the transceiver for signal reception with programmable
+  gain and filtering.
+
+  \DndMonsterAction{Transmit Mode}
+  Generate and transmit RF signals with adjustable attenuation.
+
+  \DndMonsterSection{Key Attributes}
+  \begin{itemize}
+    \item Integrated frequency synthesizers
+    \item Automatic and manual gain control
+    \item Programmable FIR filters
+    \item Fast frequency hopping capability
+  \end{itemize}
+\end{DndMonster}
+
+
+% ============================================================================
+% COLORS
+% ============================================================================
+
+% Available theme colors (from core D&D books):
+% PhbLightGreen  - Light green (default, Part 1 style)
+% PhbLightCyan   - Light cyan (Part 2 style) - RECOMMENDED FOR SDR MANUAL
+% PhbMauve       - Pale purple (Part 3 style)
+% PhbTan         - Light brown (Appendix style)
+% DmgLavender    - Pale purple
+% DmgCoral       - Orange-pink
+% DmgSlateGray   - Blue-gray
+% DmgLilac       - Purple-gray
+
+% Change theme for a section:
+\begingroup
+\DndSetThemeColor[PhbMauve]
+% Your colored content here
+\endgroup
+
+
+% ============================================================================
+% TYPOGRAPHY
+% ============================================================================
+
+% Drop cap at chapter start (already shown above)
+\DndDropCapLine{F}{irst letter is large} and rest continues normally.
+
+% Emphasis
+\emph{emphasized text}
+
+% Strong emphasis
+\textbf{bold text}
+
+% Typewriter (for code, filenames, commands)
+\texttt{filename.txt}
+
+% Small caps
+\textsc{Small Caps}
+
+
+% ============================================================================
+% CROSS-REFERENCES
+% ============================================================================
+
+% Label a section
+\section{Buffer Management}\label{sec:buffer_mgmt}
+
+% Reference it
+See Section~\ref{sec:buffer_mgmt} for details.
+
+% Label a table
+\begin{DndTable}[header=My Table]{XX}\label{tab:mytable}
+  % table content
+\end{DndTable}
+
+% Reference it
+As shown in Table~\ref{tab:mytable}, the buffer sizes...
+
+
+% ============================================================================
+% LISTS
+% ============================================================================
+
+% Bullet list
+\begin{itemize}
+  \item First item
+  \item Second item
+  \item Third item
+\end{itemize}
+
+% Numbered list
+\begin{enumerate}
+  \item First step
+  \item Second step
+  \item Third step
+\end{enumerate}
+
+% Description list
+\begin{description}
+  \item[Term 1] Definition of term 1
+  \item[Term 2] Definition of term 2
+\end{description}
+
+
+% ============================================================================
+% FIGURES AND IMAGES
+% ============================================================================
+
+% Single column figure
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.9\linewidth]{images/buffer_diagram.png}
+  \caption{IIO Buffer Architecture}
+  \label{fig:buffer_arch}
+\end{figure}
+
+% Full-width figure (spans both columns)
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.9\textwidth]{images/signal_flow.png}
+  \caption{Complete Signal Flow Diagram}
+  \label{fig:signal_flow}
+\end{figure*}
+
+
+% ============================================================================
+% MATHEMATICAL EXPRESSIONS
+% ============================================================================
+
+% Inline math
+The Nyquist rate is $f_s \geq 2f_{max}$.
+
+% Display math
+\[
+  SNR = 20 \log_{10}\left(\frac{V_{signal}}{V_{noise}}\right)
+\]
+
+
+% ============================================================================
+% BEST PRACTICES FOR COLLABORATION
+% ============================================================================
+
+% 1. Use consistent indentation (2 or 4 spaces)
+% 2. Add comments before complex tables or code blocks
+% 3. Keep lines under 80 characters when possible
+% 4. Use labels for all sections, tables, and figures you might reference
+% 5. Test compile frequently to catch errors early
+% 6. Use meaningful label names: sec:buffer_mgmt not sec:1
+% 7. Keep one sentence per line for easier diff/merge
+% 8. Use \include{} not \input{} for chapter files
+
+
+% ============================================================================
+% EXAMPLE CHAPTER SNIPPET
+% ============================================================================
+
+\chapter{Understanding Buffers}
+
+\DndDropCapLine{B}{uffers are the fundamental mechanism} for transferring
+sample data between your application and the Pluto SDR hardware.
+Understanding how buffers work in the IIO framework is essential for
+achieving optimal performance.
+
+\section{Buffer Architecture}
+
+The IIO subsystem uses a circular buffer architecture that operates
+in kernel space. Your application interacts with these buffers through
+the libiio library.
+
+\begin{DndComment}{Memory Efficiency}
+  Circular buffers eliminate the need for frequent memory allocations.
+  The kernel continuously fills (RX) or drains (TX) the buffer while
+  your application processes data at its own pace.
+\end{DndComment}
+
+\subsection{Kernel Space vs User Space}
+
+\begin{DndTable}[header=Buffer Regions]{lX}
+  \textbf{Region} & \textbf{Description} \\
+  Kernel Space & DMA-accessible memory managed by driver \\
+  User Space & Memory-mapped region accessible to application \\
+  Transfer Zone & Synchronization point between spaces \\
+\end{DndTable}
+
+\section{Creating Your First Buffer}
+
+\begin{DndReadAloud}
+  To create a buffer, you must first have a valid IIO device handle.
+  The buffer size must be specified in samples, not bytes. Choose a
+  size appropriate for your latency requirements.
+\end{DndReadAloud}
+
+\begin{lstlisting}
+// Create a 4096-sample buffer for RX
+struct iio_buffer *rxbuf;
+rxbuf = iio_device_create_buffer(rx_dev, 4096, false);
+if (!rxbuf) {
+    perror("Failed to create buffer");
+    return -1;
+}
+\end{lstlisting}
+
+The |false| parameter indicates this is a receive buffer (input).
+For transmit buffers, use |true|.
+
+
+% ============================================================================
+% END OF STYLE GUIDE
+% ============================================================================

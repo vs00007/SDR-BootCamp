@@ -1,0 +1,29 @@
+\section{PySDR setup on Linux}
+\noindent
+\textbf{Important Installation Instructions:}
+
+\medskip
+The installation of all required libraries, software, and firmware \textbf{must be performed strictly through the official documentation} available at:
+\begin{center}
+\url{https://pysdr.org/content/pluto.html#}
+\end{center}
+
+\noindent
+It is \textbf{mandatory} to execute the commands provided on the official webpage \textbf{exactly in the specified order} and \textbf{one command at a time}. Skipping steps, altering the order, or executing multiple commands simultaneously may lead to installation failures or unstable system behavior.
+
+\medskip
+Furthermore, it is \textbf{strongly recommended} to perform the entire setup inside a \textbf{dedicated Python virtual environment} rather than using the global Python installation. This helps prevent dependency conflicts and ensures a clean, reproducible setup.
+
+After completing the setup, it is \textbf{mandatory to verify the correctness of the installation} by executing the \textbf{test examples provided on the official PySDR webpage}. These tests must be performed for:
+\begin{itemize}
+    \item the \textbf{transmitter},
+    \item the \textbf{receiver}, and
+    \item the \textbf{simultaneous operation of both transmitter and receiver}.
+\end{itemize}
+
+\noindent
+Successful execution of all the above tests confirms the proper functioning of the software, firmware, and hardware interfaces.
+
+After this step, we also suggest giving a good read to the examples on synchronization provided at
+\href{https://pysdr.org/content/sync.html}{pysdr.org}. These examples give the reader a very good
+understanding of important topics in communication systems.

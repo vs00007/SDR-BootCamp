@@ -1,0 +1,213 @@
+\section{Python Driver Installation and Configuration}
+
+This section describes the installation and configuration of PlutoSDR drivers for Python across Windows, Linux, and macOS platforms. The recommended approach uses Miniconda-based virtual environments to ensure reproducibility and avoid dependency conflicts.
+
+\subsection{Prerequisites}
+
+Before proceeding, ensure familiarity with basic Python programming, digital signal processing concepts, and command-line usage. The PlutoSDR must be physically connected via USB and recognized by the operating system.
+
+\subsection{Cross-Platform Installation Guidance}
+
+General installation guidance applicable to all platforms is maintained by Analog Devices:
+
+\begin{lstlisting}
+https://wiki.analog.com/sdrseminars
+\end{lstlisting}
+
+This resource contains platform-specific driver requirements, troubleshooting steps, and supported software versions.
+
+\subsection{Recommended Installation for Windows}
+
+The following procedure provides a reliable installation path for Windows users using Miniconda for environment management.
+
+\subsubsection{Install Miniconda}
+
+Download and install Miniconda from the official Anaconda distribution:
+
+\begin{lstlisting}
+https://www.anaconda.com/docs/getting-started/miniconda/install
+\end{lstlisting}
+
+Miniconda provides a minimal Python distribution with the \texttt{conda} package manager, suitable for isolated environments.
+
+\subsubsection{Create and Activate a Virtual Environment}
+
+Open Command Prompt or PowerShell and execute:
+
+\begin{lstlisting}[language=bash]
+conda create -n pluto python=3.10
+conda activate pluto
+\end{lstlisting}
+
+Python 3.10 is recommended for compatibility with current \texttt{pyadi-iio} releases.
+
+\subsubsection{Install PyADI-IIO}
+
+With the environment active, install the Analog Devices Python interface:
+
+\begin{lstlisting}[language=bash]
+pip install pyadi-iio
+\end{lstlisting}
+
+This installs the \texttt{adi} module used to interface with the PlutoSDR.
+
+\subsubsection{Verify Installation}
+
+Create a test script \texttt{pluto\_test.py}:
+
+\begin{lstlisting}[language=Python]
+import numpy as np
+import adi
+
+sample_rate = 1e6
+center_freq = 915e6
+
+sdr = adi.Pluto("ip:192.168.2.1")
+sdr.sample_rate = int(sample_rate)
+sdr.tx_rf_bandwidth = int(sample_rate)
+sdr.tx_lo = int(center_freq)
+sdr.tx_hardwaregain_chan0 = -50
+
+N = 10000
+t = np.arange(N) / sample_rate
+samples = 0.5 * np.exp(2j * np.pi * 100e3 * t)
+samples *= 2**14
+
+for _ in range(100):
+    sdr.tx(samples)
+\end{lstlisting}
+
+Run:
+
+\begin{lstlisting}[language=bash]
+python pluto_test.py
+\end{lstlisting}
+
+Successful execution indicates correct installation and connectivity.
+
+\begin{DndComment}{Common Issues}
+If you encounter \texttt{ModuleNotFoundError: No module named 'adi'}, verify that the Conda environment is active and \texttt{pyadi-iio} is installed within it.
+\end{DndComment}
+
+\subsubsection{Extended TX/RX Test}
+
+Example TX/RX scripts are available at:
+
+\begin{lstlisting}
+https://pysdr.org/content/pluto.html
+\end{lstlisting}
+
+RX and TX hardware gains may require manual tuning for clean visualization.
+
+\section{Frequency Range Extension}
+
+By default, the PlutoSDR supports approximately 325~MHz to 3.8~GHz. The underlying RFIC is capable of operation from 70~MHz to 6~GHz, which can be unlocked through firmware configuration.
+
+\subsection{Performance Considerations}
+
+Operation outside the official frequency range is not guaranteed. Performance degradation, increased phase noise, and instability may occur, particularly above 5~GHz.
+
+\subsection{Configuration Procedure}
+
+\subsubsection{Verify Firmware Version}
+
+Firmware version 0.31 or newer is required:
+
+\begin{lstlisting}
+https://wiki.analog.com/university/tools/pluto/users/firmware
+\end{lstlisting}
+
+\subsubsection{Enable Extended Tuning}
+
+SSH into the device:
+
+\begin{lstlisting}[language=bash]
+ssh root@192.168.2.1
+\end{lstlisting}
+
+Run:
+
+\begin{lstlisting}[language=bash]
+fw_setenv attr_name compatible
+fw_setenv attr_val ad9364
+reboot
+\end{lstlisting}
+
+After reboot, verify tuning outside the default range.
+
+\section{Dual Transmit and Receive Configuration (2TX/2RX)}
+
+The AD9361 supports two TX and two RX chains internally, though only one of each is routed externally on stock hardware.
+
+\subsection{Hardware Modification Requirements}
+
+Full 2TX/2RX operation requires hardware modification:
+
+\begin{lstlisting}
+https://wiki.analog.com/university/tools/pluto/hacking/hardware
+\end{lstlisting}
+
+\begin{DndReadAloud}
+Hardware modification voids warranty and carries risk. Proceed only if you have appropriate soldering experience.
+\end{DndReadAloud}
+
+\subsection{Firmware Configuration}
+
+Enable 2TX/2RX mode:
+
+\begin{lstlisting}[language=bash]
+ssh root@192.168.2.1
+fw_setenv attr_name compatible
+fw_setenv attr_val ad9361
+fw_setenv mode 2r2t
+reboot
+\end{lstlisting}
+
+\subsection{Python Configuration Example}
+
+\begin{lstlisting}[language=Python]
+import numpy as np
+import adi
+
+sdr = adi.ad9361("ip:192.168.2.1")
+sdr.sample_rate = int(2e6)
+
+sdr.tx_lo = int(2.4e9)
+sdr.tx_enabled_channels = [0, 1]
+sdr.tx_hardwaregain_chan0 = -30
+sdr.tx_hardwaregain_chan1 = -30
+
+sdr.rx_lo = int(2.4e9)
+sdr.rx_enabled_channels = [0, 1]
+sdr.rx_hardwaregain_chan0 = 20
+sdr.rx_hardwaregain_chan1 = 20
+
+N = 1024
+t = np.arange(N) / sdr.sample_rate
+tx0 = np.exp(2j * np.pi * 100e3 * t) * 2**14
+tx1 = np.exp(2j * np.pi * 200e3 * t) * 2**14
+
+sdr.tx([tx0, tx1])
+rx_data = sdr.rx()
+\end{lstlisting}
+
+\subsection{MATLAB Configuration Summary}
+
+MATLAB requires the Analog Devices Transceiver Toolbox and the AD9361 system object:
+
+\begin{lstlisting}[language=Matlab]
+tx = adi.AD9361.Tx('uri','ip:192.168.2.1');
+tx.EnabledChannels = [1,2];
+
+rx = adi.AD9361.Rx('uri','ip:192.168.2.1');
+rx.EnabledChannels = [1,2];
+\end{lstlisting}
+
+\subsection{Reference Implementations}
+
+\begin{DndTable}[header=Selected Resources]{lX}
+\textbf{Topic} & \textbf{Resource} \\
+2TX/2RX Setup & \href{https://www.youtube.com/watch?v=ph0Kv4SgSuI}{YouTube} \\
+Phased Arrays & \href{https://github.com/jonkraft}{Jon Kraft GitHub} \\
+ADI Python Examples & \href{https://github.com/analogdevicesinc/pyadi-iio/tree/master/examples}{GitHub} \\
+\end{DndTable}

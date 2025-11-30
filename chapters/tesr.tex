@@ -1,0 +1,195 @@
+\chapter{Beamforming}
+\section{Introducing Beamforming}
+In modern RADAR and communication systems, \textbf{beamforming} is a key technique used to direct the reception or transmission of signals in specific spatial directions. The ability to estimate the \textbf{Angle of Arrival (AoA)} of a received signal enables systems to locate and track active sources or targets.
+
+We now present the implementation of \textbf{monopulse beamforming} using an \textbf{ADALM-Pluto Software Defined Radio (SDR)}. The system transmits a known reference tone, receives it through a two-element antenna array, and estimates the AoA of an active target based on the \textbf{phase difference} between received signals.
+
+\section{Digital Beamforming}
+\subsection{Concept Overview}
+\textbf{Digital Beamforming (DBF)} is a signal processing technique in which the signals received by multiple antenna elements are digitized and combined in the \textit{digital domain} using complex weighting coefficients.  
+By adjusting these weights, the system can electronically steer the main beam toward a desired direction or place nulls toward unwanted sources — all without physically moving the antennas.
+
+Unlike analog beamforming, which relies on hardware-based phase shifters and combiners, digital beamforming performs all spatial filtering and steering in software, offering high flexibility, adaptability, and precision.
+
+\subsection{Mathematical Model}
+Consider an array of $N$ antenna elements receiving a narrowband signal $s(t)$ arriving from direction $\theta$.  
+The received signal vector can be expressed as:
+\begin{equation}
+    \mathbf{x}(t) = s(t)\mathbf{a}(\theta) + \mathbf{n}(t)
+\end{equation}
+where:
+\begin{itemize}
+    \item $\mathbf{a}(\theta)$ is the \textit{steering vector}, which represents the phase progression across antennas for a signal from direction $\theta$,
+    \item $\mathbf{n}(t)$ is the noise vector.
+\end{itemize}
+
+For two receivers with inter-element spacing $d$, the steering vector is given by:
+\begin{equation}
+    \mathbf{a}(\theta) =
+    \begin{bmatrix}
+    1 \\
+    e^{-j\frac{2\pi d}{\lambda}\sin(\theta)} \\
+    \end{bmatrix}
+\end{equation}
+
+The beamformer output is obtained by applying a complex weight vector $\mathbf{w}$:
+\begin{equation}
+    y(t) = \mathbf{w}^H \mathbf{x}(t)
+\end{equation}
+
+\subsection{Beam Steering}
+To steer the beam toward a desired angle $\theta_0$, the weights are typically chosen proportional to the steering vector:
+\begin{equation}
+    \mathbf{w} = \mathbf{a}(\theta_0)
+\end{equation}
+This choice ensures that signals arriving from $\theta_0$ add constructively across the array, maximizing gain in that direction while causing destructive interference in the other directions.
+
+\section{Theory}
+\subsection{Angle of Arrival Calculation}
+If two antennas receive a plane wave at slightly different phases due to path delay, the phase difference $\Delta \phi$ can be used to compute the angle of arrival $\theta$:
+
+\begin{equation}
+    \Delta \phi=\frac{2\pi d\sin{\theta}}{\lambda}
+\end{equation}
+
+\begin{itemize}
+    \item $f$ — carrier frequency (Hz),
+    \item $d$ — antenna spacing (m),
+    \item $\Delta \phi$ — measured phase difference (radians).
+\end{itemize}
+
+Hence:
+\begin{equation}
+    \theta = \arcsin\left(\frac{c \, \Delta \phi}{2\pi f d}\right)
+\end{equation}
+
+Here we consider the received signals to be parallel rather than circular, hinting that we need to place the active transmitter very far away from the receiver antennas.\\
+
+We place the received antennas at a distance of $\frac{\lambda}{2}$ of the carrier frequency to avoid antenna interference. 
+
+\subsection{Monopulse Technique}
+Monopulse beamforming combines two signals to form sum and difference channels:
+
+\begin{align}
+    \Sigma &= R_1 + R_2 \\
+    \Delta &= R_1 - R_2
+\end{align}
+
+The \textbf{sum channel} represents the total received power, while the \textbf{difference channel} captures the angular error. The correlation between $\Sigma$ and $\Delta$ 
+provides the direction to steer the antenna array.
+
+When the sum and the delta signals are represented in complex version and then we take correlation at then the delay is 0, it becomes inner product on further solving it turns to be a $\sin{(\theta-\phi)}$ as we use this for tracking we can make an assumption that is the difference is very small and small angle approximation is used.
+\begin{align*}
+    \theta&:\text{The original received phase difference}\\
+    \phi&:\text{The sweeping angle}
+\end{align*}
+The sign of the correlation tells us which direction to steer the sweep angle. When the beam is aligned with the target, $\Delta \approx 0$, indicating zero angle error.
+
+\subsection{Proof - Frequency domain correlation}
+
+Let the observed signals at the two receivers be
+\[
+x_0(t) = A e^{j2\pi f_0 t}
+\]
+\[
+x_1(t) = A e^{j2\pi f_0 t} e^{j\phi}
+\]
+where $A$ is amplitude, $f_0$ is the signal frequency, and $\phi$ is the phase offset due to the signal's direction of arrival (DOA).
+
+Apply a steering phase $\phi_{\text{delay}}$ to $x_1(t)$:
+\[
+\Sigma(t) = x_0(t) + x_1(t) e^{j\phi_{\text{delay}}} = A e^{j2\pi f_0 t}[1 + e^{j\epsilon}]
+\]
+\[
+\Delta(t) = x_0(t) - x_1(t) e^{j\phi_{\text{delay}}} = A e^{j2\pi f_0 t}[1 - e^{j\epsilon}]
+\]
+\[\epsilon = \phi - \phi_{\text{delay}}\]
+Perform a Fourier Transform of these signals:
+\begin{align*}
+S = \Sigma(f_0) &= A[1 + e^{j\epsilon}] \\
+D = \Delta(f_0) &= A[1 - e^{j\epsilon}]
+\end{align*}
+
+Compute the frequency domain correlation at the tone:
+\begin{align*}
+\mathrm{Corr} &= S^* D = [A(1 + e^{j\epsilon})]^* \cdot [A(1 - e^{j\epsilon})] \\
+&= A^2 (1 + e^{-j\epsilon})(1 - e^{j\epsilon}) \\
+&= A^2 [1 - e^{j\epsilon} + e^{-j\epsilon} - e^{-j\epsilon}e^{j\epsilon}] \\
+&= A^2 [1 - e^{j\epsilon} + e^{-j\epsilon} - 1] \\
+&= A^2 [ -e^{j\epsilon} + e^{-j\epsilon} ] \\
+&= -A^2 [ e^{j\epsilon} - e^{-j\epsilon} ] \\
+&= -A^2 [2j\sin\epsilon ] \\
+&= -2jA^2 \sin(\epsilon)
+\end{align*}
+
+Thus, the correlation is purely imaginary, and the sign of its imaginary part reveals which direction to adjust the steering phase:
+- If $\sin(\epsilon) > 0$: $\mathrm{Corr}$ phase is $-90^\circ$ (steer phase down)
+- If $\sin(\epsilon) < 0$: $\mathrm{Corr}$ phase is $+90^\circ$ (steer phase up)
+.
+
+\subsection{Parseval's Theorem}
+Parseval's theorem states that the total energy of a signal is preserved between time and frequency domains:
+\[
+\sum_{n} x[n] y^*[n] = \frac{1}{N}\sum_{k} X[k] Y^*[k]
+\]
+where $x[n]$ and $y[n]$ are discrete signals and $X[k], Y[k]$ are their DFTs. The reason i have mentioned this is because we can do the exact same process with the time domain signals (we get the same function as above, although scaled but we only care about the sign) for steering the array.
+
+\section{Algorithm Description}
+\subsection{Step 1: Signal Transmission}
+A complex sinusoidal signal (I/Q) is generated at 200 kHz:
+\begin{equation}
+    x(t) = \cos(2\pi f_c t) + j \sin(2\pi f_c t)
+\end{equation}
+This is transmitted continuously through both channels.The gain of one channel is set to a very low value, we only need a single channel to transmit.
+
+\subsection{Step 2: Data Acquisition}
+Two receiver channels capture the incoming complex I/Q samples. Each channel corresponds to one antenna in the array. $R_1$ and $R_2$ respectively.
+
+\subsection{Step 3: Direction Scanning (DOA Estimation)}
+Phase shifts from $-180^{\circ}$ to $+180^{\circ}$ are applied to the second channel. The system computes the FFT-based power of the sum and difference signals. The phase delay that yields the highest sum power corresponds to the \textbf{direction of arrival}.
+
+\subsection{Step 4: Monopulse Tracking}
+Once the initial angle is found, a feedback loop continuously adjusts the delay phase based on the sign of monopulse correlation, enabling \textbf{real-time angle tracking}.
+
+\section{Limitations}
+\begin{itemize}
+    \item Requires precise antenna alignment and spacing.
+    \item Multipath reflections can distort phase measurements. The original author recommends to use log periodic antennas for stable readings
+    \item It has been observed that antenna alignment of active tx throws off the DOA estimation, making it extremely hard and inconsistent to capture fairly good runs.
+    \item The estimates are fairly good for tx separation 5 times the antenna separation. Beyond this, although we are supposed to get good results theoretically(waves get more planar- more ideal), the performance becomes more inconsistent.
+\end{itemize}
+
+\section{Additional points}
+\begin{enumerate}
+    \item 
+In case you have the pysdr version of installationIt is recommended to remove the \texttt{PySDR} installation, as the 2~TX--2~RX configuration does not run and gives segmentation faults (when the object \texttt{ad9361} is called). Follow the instructions given on the Analog Devices page and use Anaconda to install the \texttt{libiio} and \texttt{pyadi} packages on Windows to avoid faults. Note that this setup is optional and is only required if you want to verify the original codes on python. You can always switch to MATLAB to avoid the above setup, but it is recommended as the author uses pyqt for plotting, which is much faster to visualize and debug than conventional matlab plotter.\\[4pt]
+
+\item 
+Additionally, the references used for our codes are listed below \\
+\href{https://github.com/jonkraft/Pluto_Beamformer/blob/main/Pluto_beamformer_MonopulseTracking_youtube.py}{Github repo of Jon Kraft}
+
+\item For the pyqt - Monopulse tracking code from the reference, make the following changes to the main block (issues due to update of pyqt package):
+\begin{lstlisting}
+if __name__ == '__main__':
+    from pyqtgraph.Qt import QtWidgets
+    app = QtWidgets.QApplication.instance()
+    if app is None:
+        app = QtWidgets.QApplication([])
+    app.exec()
+\end{lstlisting}
+
+\item For the matlab version, you may use the code from my github(will be upladed soon)
+
+\end{enumerate}
+
+\section{Chirp based implementation for monopulse tracking}
+If you have understood the theory of using sines from the above section well, you will understand that for a linear chirp (linear as in linear in f-t domain), none of the equations change - except for the IQ components of the transmission signal. Again, you can refer to my github for the python implementation of this task. Take it as a challenge to do this on MATLAB (if you want your work cut short refer to my matlab implementation on python for normal sine signals, and just replace it with chirps)\\
+If you dont quite understand the theory of chirp, chirp based radar, refer to the video
+    \href{https://www.youtube.com/watch?v=xUGWHGjCtII&t=67s}{here}.
+
+\section{Conclusion}
+For everything related to RADAR, use Jon Kraft's playlist for intuition on hardware implementation of an FMCW radar(uses chirps) and why a sole implementation on Pluto is not really good (due to poor target resolution).\\
+If you have followed all the steps till here you're pretty much good to go and explore other applications/tasks that might be possible on Pluto.
+\\
+Credits to Jon Kraft for exploring a lot in these areas. Make sure to not remove the copyright from his codes if you plan on publishing or for other purposes.
+

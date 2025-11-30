@@ -1,0 +1,243 @@
+\chapter{Digital Data Flow}
+\ChapterCredits{
+  Mihir Divyansh E,
+  Vemula Siddhartha
+}
+
+\section{Overview}
+
+In the PlutoSDR, buffering appears at multiple boundaries: inside the RF transceiver, within the FPGA fabric, across the processor subsystem, and finally at the USB interface to the host computer. Understanding this multi$-$level buffer hierarchy is essential to understand synchronisation limits, update dynamics, and more importantly feasibility of any given project involving SDR. 
+
+\begin{DndReadAloud}
+    No, seriously, a lot of what you can and cannot do, depends on the buffering semantics, as this is a considerable portion of the latency.
+\end{DndReadAloud}
+This chapter describes the buffer architecture of the PlutoSDR from the lowest hardware level to the host interface, focusing on how samples move through the system and where bottlenecks can arise.
+\section{The Role of Buffers}
+
+Buffers are temporary storage regions that hold data as it moves between different processing stages or across interface boundaries. In streaming systems such as SDRs, buffers solve a fundamental problem: while RF hardware operates continuously in real time, software processing and data transport are inherently bursty and subject to unpredictable delays.
+
+By introducing elasticity into the data path, buffers:
+\begin{itemize}
+  \item Absorb short$-$term timing variations between producers and consumers
+  \item Allow components operating in different clock domains to interact safely
+  \item Enable batch$-$based data transfers across inefficient interfaces such as USB
+\end{itemize}
+
+Without buffering, even momentary delays in software execution would immediately cause data loss. With insufficient buffering, reliable sustained operation at high sample rates becomes impossible.
+
+\section{Buffer Hierarchy}
+
+The PlutoSDR implements buffering at several distinct layers, each aligned with a physical or logical boundary in the system. These layers differ in size, function, and level of user visibility.
+
+\subsection{AD9361 Internal Buffers}
+
+At the lowest level, the AD9361 RF transceiver contains small internal FIFOs that sit between the high$-$speed ADCs and DACs and the digital filtering and interpolation/decimation stages. These buffers are entirely internal to the transceiver and are not directly configurable by the user.
+
+Their primary purpose is to support interpolation and decimation without interrupting real$-$time sampling
+
+On the receive path, samples accumulate after ADC conversion and digital decimation before being transferred out of the transceiver. On the transmit path, samples must be available in sufficient quantity ahead of DAC conversion to prevent underruns. Because these buffers are small, they provide only minimal tolerance to timing disturbances.
+
+\subsection{Programmable Logic (PL) Buffers}
+
+Above the AD9361 lie buffers implemented within the Zynq programmable logic (PL). These are typically realized using FPGA block RAM configured as FIFOs.
+
+PL$-$side buffers serve several critical roles:
+
+\begin{itemize}
+  \item \textbf{Clock domain crossing:} The AD9361 operates on clocks derived from the RF subsystem, while the Zynq processing system uses different clock domains. Asynchronous FIFOs are used here for crossing.
+  \item \textbf{Rate smoothing:} Short$-$term fluctuations in Processing System response—due to interrupts, bus contention, or scheduling—are absorbed without disrupting the RF data stream.
+  \item \textbf{Data width conversion:} The AD9361 produces 12$-$bit I/Q samples, while the internal system buses typically operate on wider word sizes.
+\end{itemize}
+
+These buffers are relatively small, typically holding on the order of hundreds to a few thousand samples. They are designed to absorb brief timing mismatches rather than to store large amounts of data.
+
+\subsection{Processing System (PS) Buffers}
+
+Once data crosses from the PL into the Zynq Processing System, buffering transitions from hardware$-$managed to software$-$managed. Samples are stored in DDR memory buffers allocated by the Linux Industrial I/O (IIO) subsystem.
+
+PS$-$side buffers are significantly larger than PL buffers and are typically implemented as circular buffers capable of holding tens of thousands of samples. Their size and behavior are configurable through software.
+
+These buffers serve several important functions:
+
+\begin{itemize}
+  \item \textbf{USB transfer efficiency:} USB transfers are inefficient for small payloads. Large buffers allow the system to batch data into fewer, larger transfers.
+  \item \textbf{Timing isolation:} Software delays on either the PlutoSDR or host side do not immediately impact the real$-$time RF hardware.
+  \item \textbf{Computation staging:} When signal processing is performed on the PlutoSDR itself, these buffers provide working memory for block$-$based algorithms.
+\end{itemize}
+
+While PS buffers provide substantial elasticity, they also introduce latency that must be considered in time$-$sensitive applications.
+
+\subsection{USB DMA and Host Transfer}
+
+The final stage in the data flow involves Direct Memory Access (DMA) between PS buffers and the USB controller, followed by USB bulk transfers to the host computer.
+
+On the transmit path, IQ samples flow from the host to PS memory via USB, then onward through the PL and into the AD9361. On the receive path, samples move in the opposite direction, accumulating in PS buffers until transferred to the host.
+
+Although USB 2.0 advertises a theoretical throughput of 480~Mbps, sustained usable bandwidth is lower due to protocol overhead and host$-$side limitations. For high sample rate operation, USB bandwidth often becomes the dominant performance bottleneck, making careful buffer sizing and rate management essential.
+
+\section{Underruns and Overruns}
+
+Buffering failures generally appear in one of two forms:
+
+\begin{itemize}
+  \item \textbf{Transmit underruns}, where the RF hardware consumes samples faster than they are supplied, resulting in repeated or zero$-$valued samples and visible spectral artifacts.
+  \item \textbf{Receive overruns}, where incoming samples arrive faster than they can be consumed, forcing the system to discard data and creating gaps in the received signal stream.
+\end{itemize}
+
+Both conditions arise from sustained rate mismatches rather than brief timing anomalies. Buffers can absorb short$-$term disruptions, but no buffer can compensate if the average data rate exceeds what downstream components can handle.
+
+\section{Buffer Size Tradeoffs}
+
+Increasing buffer sizes improves tolerance to timing variations and reduces the likelihood of underruns and overruns, but at the cost of increased latency. Every additional buffer stage adds delay between RF sampling and sample availability at the host.
+
+Applications with strict latency requirements must operate with smaller buffers and accept a higher risk of data loss. Applications focused on recording or offline analysis can use larger buffers to maximize reliability.
+\begin{DndReadAloud}
+  In the PlutoSDR, most high$-$sample$-$rate failures are not caused by misconfigured RF parameters but by mismatches between buffer capacity, USB bandwidth, and software execution timing. Understanding the buffer hierarchy is therefore central to diagnosing performance problems.
+\end{DndReadAloud}
+
+\section{Implications for Timing$-$Critical Applications}
+
+The layered buffer architecture described above has direct and unavoidable consequences for applications requiring tight timing control. While the PlutoSDR is highly flexible in terms of signal generation and capture, it is fundamentally not a low$-$latency, tightly synchronized RF platform. This section explains why certain classes of applications—most notably fast adaptive transmission and radar systems—are impractical or infeasible on the PlutoSDR.
+
+\subsection{Limits on Fast Transmit Buffer Switching}
+
+In adaptive communication systems, it is often desirable to switch transmit waveforms or parameters accurately on very short timescales (e.g., below a few (4)~ms, near coherence time), based on channel feedback or receiver measurements. Examples include fast link adaptation, burst$-$based protocols, or time$-$slotted systems.
+
+On the PlutoSDR, transmit data originates on the host computer and must traverse the following stages before reaching the RF hardware:
+\begin{enumerate}
+  \item Host OS scheduling overhead
+  \item Host$-$side application buffers
+  \item USB transfer buffers
+  \item Device OS scheduling overhead
+  \item Processing System (PS) memory buffers
+  \item PL$-$side FIFOs
+  \item AD9361 internal buffers
+\end{enumerate}
+
+Each stage in the data path introduces both latency and timing uncertainty. USB transfers occur in burst$-$oriented transactions rather than at continuous sample granularity, Linux scheduling adds non$-$deterministic delays, and the large buffers in the Processing System are deliberately designed to decouple software execution from real$-$time RF operation. As a result, actions taken by the host application—such as switching to a new transmit buffer—are separated from RF emission by multiple layers of buffering and cannot be mapped to a precisely defined transmit time.
+
+Under typical operating conditions, this delay is on the order of milliseconds and varies with system load and buffer configuration. Consequently, reliable transmit buffer switching on sub$-$10~ms timescales is not achievable when the PlutoSDR is driven from a host computer over USB. Operating in this regime generally produces delayed or uneven transitions and non$-$repeatable timing behavior, rather than deterministic, tightly bounded updates.
+
+\subsection{Transmit$-$$-$Receive Synchronization Constraints}
+
+Radar systems and certain sensing applications impose far stricter timing requirements than most communication systems. In pulse radar or FMCW radar, accurate detection depends on precise knowledge of the timing relationship between transmitted and received signals. This often requires:
+\begin{itemize}
+  \item Deterministic transmit start times
+  \item Known and stable latency between TX and RX paths
+  \item Sample$-$level or microsecond$-$level synchronization
+\end{itemize}
+
+Although the AD9361 itself is capable of coherent transmit and receive operation with shared clocks and local oscillators, this determinism does not extend across the full PlutoSDR system. Once samples pass beyond the RF transceiver into the PL and PS buffer layers, timing becomes software$-$mediated and non$-$deterministic.
+
+On the receive side, samples that are captured at a precise RF time are delivered to the host only after traversing multiple buffering stages. On the transmit side, samples are emitted by the RF hardware based on when the internal buffers are filled, not on when the host application issues a command. There is no hardware mechanism on the PlutoSDR to align a specific transmit sample boundary with a specific received sample boundary in host$-$visible time.
+
+As a result, while you can post$-$process received data and observe returns, accurately relating these samples to the precise transmit event that caused them is not possible with tight timing guarantees.
+
+We can do multiple TX antennas to establish the reference transmit stream, and measure the reflection, but this has problems concerning the resolution achievable being $>6$m at optimal conditions
+
+\subsection{What the PlutoSDR \emph{Can} Do Instead}
+
+These limitations do not imply that the PlutoSDR is unsuitable for experimentation or learning. Rather, we can define the regime in which the platform operates well.
+
+The PlutoSDR is well$-$suited for:
+\begin{itemize}
+  \item Continuous or quasi$-$continuous transmission and reception.
+  \item Spectral analysis and waveform experimentation
+  \item Slow adaptation on timescales of hundreds of milliseconds or more
+  \item Understanding the problems faced in communications, beyond textbook
+\end{itemize}
+
+Applications requiring tight real$-$time control, deterministic latency, or microsecond$-$level synchronization generally require SDR platforms with FPGA$-$resident processing, direct RF triggering, and high$-$speed host interfaces (e.g., PCIe instead of USB).
+It can also be done, as an exercise for interested readers, by creating your own library in C, cross compiling to ARM Cortex cores, and running the system natively on the SoC, but this of course has compute constraints, but nevertheless is good for control heavy tasks such as fast adaptation
+
+\section*{Exercises}
+
+\subsection*{Buffering and Latency}
+
+\begin{enumerate}
+  \item Identify all buffer stages that a receive sample traverses between the ADC in the AD9361 and availability to a host$-$side application. For each stage, indicate whether it primarily adds latency, variability, or throughput efficiency.
+
+  \item Consider a receive configuration operating at 4~MSPS with a processing$-$system buffer depth of 65{,}536 samples. What is the minimum buffering latency introduced by this buffer alone? How does this compare to RF propagation delays?
+\end{enumerate}
+
+\subsection*{USB and Operating System Effects}
+
+\begin{enumerate}
+  \setcounter{enumi}{2}
+  \item USB bulk transfers are optimized for throughput rather than latency. Explain how this affects determinism in SDR streaming applications.
+
+  \item Suppose a host application delivers transmit buffers at perfectly regular intervals. Why might the RF output still exhibit non$-$uniform timing or delayed updates?
+
+  \item Improving host CPU performance alone does not guarantee faster or more deterministic transmit buffer switching on the PlutoSDR. Is the above statement true? Why/Why Not?
+\end{enumerate}
+
+\subsection*{Underruns, Overruns, and Rate Matching}
+
+\begin{enumerate}
+  \setcounter{enumi}{5}
+  \item A system operates without underruns for several seconds before suddenly failing. What could be a possible issue? Justify your answer.
+
+  \item Describe a scenario in which reducing the baseband sample rate improves system stability without changing RF bandwidth.
+\end{enumerate}
+
+\subsection*{Timing$-$Critical Applications}
+
+\begin{enumerate}
+  \setcounter{enumi}{7}
+  \item For fast adaptive communications, identify which buffer stages dominate the closed$-$loop response time. Which stages are fundamentally unavoidable in a USB$-$based architecture?
+
+  \item In a radar or sensing application, explain why knowing the transmit timestamp at the host does not provide accurate information about when RF energy was emitted.
+
+  \item The PlutoSDR supports coherent transmit and receive clocks internally. Why does this not guarantee deterministic TX$-$$-$RX synchronization at the host application level?
+\end{enumerate}
+
+\subsection*{Design Judgement and Feasibility}
+
+\begin{enumerate}
+  \setcounter{enumi}{10}
+
+  \item You are permitted to modify only one layer of the system (host software, PS software, PL logic, or RF configuration). Which layer would you target to:
+  \begin{itemize}
+    \item Reduce average latency?
+    \item Reduce latency variability?
+  \end{itemize}
+
+  \item Explain why moving control logic to the ARM cores on the PlutoSDR can improve responsiveness for some applications, yet still fails to provide hard real$-$time guarantees.
+\end{enumerate}
+
+
+\vspace{-1em}
+\raggedbottom
+\begin{thebibliography}{9}
+
+\bibitem{AD9361_UG570}
+Analog Devices, Inc.,
+\textit{AD9361 Reference Manual (UG$-$570)},
+2014. [Online]. Available:
+\url{https://www.analog.com/media/en/technical$-$documentation/user$-$guides/AD9361_Reference_Manual_UG$-$570.pdf}
+
+\bibitem{Zynq_UG585}
+Xilinx, Inc.,
+\textit{Zynq$-$7000 SoC Technical Reference Manual (UG585)},
+2018. [Online]. Available:
+\url{https://docs.xilinx.com/v/u/en$-$US/ug585$-$Zynq$-$7000$-$TRM}
+
+\bibitem{Pluto_HW_Guide}
+Analog Devices,
+\textit{PlutoSDR Hardware User Guide},
+Analog Devices Wiki. [Online]. Available:
+\url{https://wiki.analog.com/university/tools/pluto/users}
+
+\bibitem{Linux_IIO}
+The Linux Kernel Organization,
+\textit{Industrial I/O Subsystem Documentation}.
+[Online]. Available:
+\url{https://www.kernel.org/doc/html/latest/driver$-$api/iio/}
+
+\bibitem{USB2_Spec}
+USB Implementers Forum,
+\textit{Universal Serial Bus Specification, Revision 2.0},
+2000.
+
+\end{thebibliography}
+

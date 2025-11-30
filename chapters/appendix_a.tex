@@ -1,0 +1,376 @@
+%\chapter*{Appendix A: \\Pluto SDR Hardware Specifications}
+%%This is prabhat just made a change so that the heading is visible in the contents the original name is commented above if need to revert.
+\appendix
+\chapter{Pluto SDR Hardware Specifications}
+\DndDropCapLine{T}{he ADALM-PLUTO (PlutoSDR)} is an active learning module designed by Analog Devices for hands-on exploration of software-defined radio, RF, and wireless communications. This appendix provides comprehensive hardware specifications and configuration details essential for working with the platform.
+
+\section{Core Hardware Specifications}
+
+\subsection{RF Transceiver: AD9361}
+
+At the heart of the PlutoSDR is the AD9361 integrated RF Agile Transceiver, providing full-duplex operation with exceptional flexibility.
+
+\begin{DndTable}[header=AD9361 Key Specifications]{lX}
+  \textbf{Parameter} & \textbf{Specification} \\
+  Frequency Range & 325 MHz to 3.8 GHz (default) \\
+  Extended Range & 70 MHz to 6.0 GHz (unofficial) \\
+  Channel Bandwidth & 200 kHz to 56 MHz \\
+  Sample Rate & 2.083333 MSPS to 61.44 MSPS \\
+  ADC Resolution & 12-bit \\
+  DAC Resolution & 12-bit \\
+  Receive Channels & 2 (1 active by default) \\
+  Transmit Channels & 2 (1 active by default) \\
+\end{DndTable}
+
+\begin{DndComment}{Frequency Range Note}
+  The official specification limits operation to 325 MHz - 3.8 GHz. However, the AD9361 chip itself supports 70 MHz - 6 GHz. Extended range operation can be enabled through firmware modifications but is not guaranteed by Analog Devices and may have reduced performance outside the specified range.
+\end{DndComment}
+
+\subsection{Processing and Memory}
+
+\begin{DndTable}[header=System Components]{lX}
+  \textbf{Component} & \textbf{Specification} \\
+  Main Processor & Xilinx Zynq Z-7010 SoC \\
+  ARM Core & Dual-core ARM Cortex-A9 @ 800 MHz \\
+  FPGA Fabric & Artix-7 \\
+  DDR3 RAM & 512 MB \\
+  Flash Storage & 32 MB (quad SPI) \\
+\end{DndTable}
+
+\subsection{Physical Characteristics}
+
+\begin{DndTable}[header=Physical Specifications]{lX}
+  \textbf{Parameter} & \textbf{Value} \\
+  Dimensions & 69mm × 30mm × 8mm \\
+  Weight & Approximately 10 grams \\
+  Power Consumption & 2W typical, 5V via USB \\
+  Operating Temp & 0°C to 70°C \\
+  RF Connectors & 2× SMA female (TX and RX) \\
+  Host Interface & USB 2.0 OTG (480 Mbps) \\
+\end{DndTable}
+
+\section{RF Performance Characteristics}
+
+\subsection{Receiver Performance}
+
+\begin{DndTable}[header=RX Specifications]{lX}
+  \textbf{Parameter} & \textbf{Typical Value} \\
+  Noise Figure & <4 dB @ max gain \\
+  Gain Range & 0 to 76 dB (1 dB steps) \\
+  Input Power Range & -90 dBm to 0 dBm \\
+  DC Offset & <10 LSB \\
+  RX Input Impedance & 50$\Omega$ \\
+\end{DndTable}
+
+\subsection{Transmitter Performance}
+
+\begin{DndTable}[header=TX Specifications]{lX}
+  \textbf{Parameter} & \textbf{Typical Value} \\
+  Output Power & -89 dB to 0 dB (adjustable) \\
+  TX Output Impedance & 50$\Omega$ \\
+  EVM & <3\% @ max power \\
+\end{DndTable}
+
+\begin{DndSidebar}[float=!t]{Power Output Warning}
+  The PlutoSDR's maximum output power is approximately 7 dBm into 50$\Omega$. For applications requiring higher power, use an external RF power amplifier. Always ensure proper attenuation when connecting TX output directly to sensitive receivers to avoid damage. Although digital attenuation ranges to 0 dB, the on-board RF chain typically delivers +5 to +7 dBm maximum output power into 50 $\Omega$
+\end{DndSidebar}
+
+%
+%
+% Write a section on modifying to 2TX/2RX
+% Write a section on modifying to 2TX/2RX 
+
+%
+%
+\section{MATLAB Setup (Windows / MacOS)}
+
+This section describes the installation and configuration procedure for using the PlutoSDR with MATLAB on Windows and macOS systems. The workflow is identical across platforms, with minor differences in driver installation and device recognition.
+
+\subsection{Required MATLAB Components}
+
+To interface with the PlutoSDR, the following MATLAB components are required:
+
+\begin{DndTable}[header=Required Software]{lX}
+  \textbf{Component} & \textbf{Notes} \\
+  MATLAB & R2019a or later \\
+  Communications Toolbox & Mandatory for SDR support \\
+  PlutoSDR Support Package & Vendor-specific hardware support \\
+  USB Drivers & Platform-specific (automatic on macOS) \\
+\end{DndTable}
+
+Earlier MATLAB versions may function but can exhibit instability at higher sample rates or during long continuous streaming sessions.
+
+\subsection{Installing the PlutoSDR Support Package}
+
+The PlutoSDR interface is provided through the \emph{Communications Toolbox Support Package for Analog Devices ADALM-PLUTO Radio}.
+
+\begin{lstlisting}[language=Matlab]
+% Launch support package installer
+supportPackageInstaller
+\end{lstlisting}
+
+In the installer:
+\begin{enumerate}
+  \item Select \textbf{Communications Toolbox Support Package for Analog Devices ADALM-PLUTO Radio}
+  \item Follow the on-screen installation steps
+  \item Restart MATLAB after installation completes
+\end{enumerate}
+
+MATLAB automatically installs all required backend interface binaries during this process.
+
+\subsection{Windows-Specific Setup}
+
+On Windows systems, the PlutoSDR is seen as a composite USB device and requires a kernel-mode driver.
+
+\begin{DndComment}{Windows Driver Installation}
+  MATLAB installs the required driver automatically as part of the support package. If the device is not recognized, verify that the PlutoSDR appears under \texttt{libusb-based USB devices} or \texttt{USB Devices} in Device Manager.
+\end{DndComment}
+
+\textbf{Common Windows Issues:}
+\begin{itemize}
+  \item USB driver conflicts with older SDR software
+  \item Insufficient USB controller bandwidth (use a native USB port, not a hub)
+  \item Power management suspending the USB device
+\end{itemize}
+
+Disabling USB selective suspend in Windows Power Options is recommended for long streaming sessions.
+
+\subsection{macOS-Specific Setup}
+
+macOS systems do not require manual driver installation. The PlutoSDR uses a user-space USB driver provided by MATLAB.
+
+\begin{DndComment}{macOS Permissions}
+  On first use, macOS may request permission for MATLAB to access removable devices or network interfaces. These permissions must be granted for proper operation.
+\end{DndComment}
+
+\textbf{Apple Silicon (M-series) Notes:}
+\begin{itemize}
+  \item MATLAB must run natively (Arm64) or under Rosetta consistently
+  \item USB throughput is generally reliable but sensitive to background load
+  \item High-sample-rate continuous streaming benefits from closing other USB-heavy applications
+\end{itemize}
+
+\subsection{Verifying PlutoSDR Detection}
+
+After installation, verify that MATLAB detects the PlutoSDR:
+
+\begin{lstlisting}[language=Matlab]
+>> sdrinfo('Pluto')
+\end{lstlisting}
+
+A valid response lists device serial number, firmware version, and connection status. Absence of output indicates a driver or connection issue.
+
+\subsection{Firmware Version Compatibility}
+
+MATLAB expects a PlutoSDR firmware version compatible with the installed support package.
+
+\begin{DndTable}[header=Firmware Considerations]{lX}
+  \textbf{Aspect} & \textbf{Recommendation} \\
+  Factory Firmware & Works with most MATLAB versions \\
+  Custom Firmware & Must retain IIO and MATLAB compatibility \\
+  Frequency Extensions & Supported by MATLAB but not guaranteed \\
+\end{DndTable}
+
+Firmware updates can be performed via the PlutoSDR web interface at \texttt{http://192.168.2.1}. After updating firmware, power-cycle the device before reconnecting to MATLAB.
+
+\subsection{Basic Connection Test}
+
+A minimal end-to-end functional test:
+
+\begin{lstlisting}[language=Matlab]
+% Create transmit object
+tx = sdrtx('Pluto');
+tx.CenterFrequency = 1e9;              
+tx.BasebandSampleRate = 1e6;           
+tx.Gain = -20;                         
+
+% Generate a complex baseband tone
+Ns = 1024;
+fTone = 50e3;                         
+t = (0:Ns-1).' / tx.BasebandSampleRate;
+
+txData = exp(1j * 2 * pi * fTone * t);
+
+% Create receiver object
+rx = sdrrx('Pluto');
+rx.CenterFrequency = 1e9;             
+rx.BasebandSampleRate = 1e6;          
+rx.SamplesPerFrame = Ns;
+rx.GainSource = 'Manual';
+rx.Gain = 20;                       
+
+% Transmit one frame
+tx(txData);
+
+% Receive samples
+rxData = rx();
+
+% Plot transmitted and received signals
+figure;
+subplot(2,1,1);
+plot(real(txData));
+title('Transmitted Signal (Real Part)');
+xlabel('Sample Index');
+ylabel('Amplitude');
+grid on;
+
+subplot(2,1,2);
+plot(real(rxData));
+title('Received Signal (Real Part)');
+xlabel('Sample Index');
+ylabel('Amplitude');
+grid on;
+
+% Release hardware
+release(rx);
+release(tx);
+\end{lstlisting}
+
+Successful execution without errors confirms proper installation, driver functionality, and USB communication.
+
+\subsection{Recommended MATLAB Settings}
+
+For reliable operation:
+
+\begin{DndTable}[header=Recommended Settings]{lX}
+  \textbf{Setting} & \textbf{Recommendation} \\
+  Sample Rate & $\leq 4$ MSPS (full duplex) \\
+  Data Type & \texttt{int16} for streaming \\
+  USB Cable & Short, shielded USB 2.0 cable \\
+  Power Source & Direct host USB port \\
+\end{DndTable}
+
+For extended recording or real-time applications, preallocate all memory buffers and avoid dynamic object reconfiguration inside processing loops.
+
+\subsection{Troubleshooting Checklist}
+
+\begin{itemize}
+  \item Ensure PlutoSDR is not assigned to another application
+  \item Verify IP connectivity at \texttt{192.168.2.1}
+  \item Restart MATLAB after connecting the device
+  \item Power-cycle the PlutoSDR if USB enumeration fails
+\end{itemize}
+
+\begin{DndReadAloud}
+  Most MATLAB--PlutoSDR issues originate from USB bandwidth limitations or driver conflicts rather than RF configuration errors. Always validate connectivity with a minimal receiver test before attempting complex signal processing pipelines.
+\end{DndReadAloud}
+\input{chapters/pysdr_installation}
+\input{chapters/adam_2txrx_setup}
+
+\section{System Limitations}
+
+\subsection{USB Interface Bandwidth}
+
+The PlutoSDR uses USB 2.0 (480 Mbps theoretical), which imposes practical limitations on sustained data rates.
+
+\begin{DndComment}{USB Bandwidth Reality}
+  While USB 2.0 provides 480 Mbps theoretical bandwidth, real-world performance is typically limited to 30-35 MB/s (240-280 Mbps) due to protocol overhead. For IQ data (16-bit I + 16-bit Q = 4 bytes per sample), this limits sustained sample rates to approximately 4-5 MSPS in each direction simultaneously.
+\end{DndComment}
+
+\begin{DndTable}[header=Practical Data Rate Limits]{lX}
+  \textbf{Configuration} & \textbf{Maximum Sustained Rate} \\
+  RX Only (1T0R) & ~8 MSPS \\
+  TX Only (0T1R) & ~8 MSPS \\
+  Full Duplex (1T1R) & ~4 MSPS per path while switching TX buffers\\
+\end{DndTable}
+
+\subsection{Sample Rate Considerations}
+
+\begin{DndTable}[header=Sample Rate Guidelines]{lX}
+  \textbf{Rate Range} & \textbf{Characteristics} \\
+  2.084 - 4 MSPS & Full duplex, no USB bottleneck \\
+  4 - 8 MSPS & May drop samples in full duplex \\
+  8 - 20 MSPS & RX or TX only, buffering required \\
+  20 - 61.44 MSPS & Intermittent operation, not sustained \\
+\end{DndTable}
+
+
+
+\begin{DndReadAloud}
+  For reliable continuous operation without dropped samples or buffer overruns, limit your sample rate to 4 MSPS or less when operating in full-duplex mode. Higher rates can be achieved in half-duplex or with careful buffer management and may require reducing processing overhead on the host computer.
+\end{DndReadAloud}
+
+\subsection{Frequency and Bandwidth Limits}
+
+\begin{DndTable}[header=RF Configuration Limits]{lXX}
+  \textbf{Parameter} & \textbf{Minimum} & \textbf{Maximum} \\
+  Center Frequency & 70 MHz* & 6000 MHz* \\
+  RF Bandwidth & 200 kHz & 56 MHz \\
+  Sample Rate & 2.083333 MSPS & 61.44 MSPS \\
+\end{DndTable}
+
+\begin{DndSidebar}[float=!b]{Extended Frequency Range}
+  *The officially supported frequency range is 325 MHz to 3.8 GHz. Operation from 70 MHz to 6 GHz is possible but not guaranteed. Performance degrades outside the official range, particularly below 300 MHz and above 4 GHz. Always verify performance for your specific application and frequency.
+\end{DndSidebar}
+
+\subsection{Memory and Processing Constraints}
+
+\begin{DndTable}[header=System Resources]{lX}
+  \textbf{Resource} & \textbf{Limitation} \\
+  DDR3 RAM & 512 MB (shared with Linux OS) \\
+  Available RAM & ~200-300 MB for buffers \\
+  Flash Storage & 32 MB (firmware and config) \\
+  ARM Processing & Limited DSP capability \\
+  FPGA Resources & Pre-configured, not user-accessible \\
+\end{DndTable}
+
+The PlutoSDR is designed primarily as an RF front-end, not a standalone signal processing platform. Heavy DSP operations should be performed on the host computer, not on the Zynq processor.
+
+\section{Network and Connectivity}
+
+\subsection{Connection Modes}
+
+\begin{DndTable}[header=Connectivity Options]{lX}
+  \textbf{Mode} & \textbf{Description} \\
+  USB Device & Default mode, PlutoSDR as USB peripheral \\
+  USB Host & PlutoSDR acts as host (requires OTG adapter) \\
+  Ethernet & USB-Ethernet bridge (192.168.2.1) \\
+  Mass Storage & Configuration file access \\
+  Serial Console & UART access for debugging \\
+\end{DndTable}
+
+\subsection{IP Configuration}
+
+When connected via USB, the PlutoSDR creates a virtual Ethernet interface:
+
+\begin{lstlisting}[language=bash]
+# Default PlutoSDR IP address
+192.168.2.1
+
+# Default host computer IP (assigned automatically)
+192.168.3.1
+
+# Access web interface
+http://192.168.2.1
+
+# Screen (tested / works)
+sudo screen /dev/tty__ 115200
+
+# SSH access (also works)
+ssh root@192.168.2.1
+# Default password: analog
+\end{lstlisting}
+
+\section{Regulatory and Safety}
+We only put this because we are obligated to, legally.  Really, nothing to be concerned about unless you are actively trying to do damage. (But it is useless by itself, for almost all illegal activities other than GPS spoofing, but you signed a contract, which holds you liable so, upto you)
+\begin{DndReadAloud}
+  The ADALM-PLUTO is an educational development tool intended for laboratory and learning environments. It is NOT certified for commercial transmission in any regulated spectrum. Users are responsible for ensuring compliance with local regulations when transmitting RF signals. In many jurisdictions, transmitting on licensed frequencies without authorization is illegal.
+\end{DndReadAloud}
+
+\section{Quick Reference Summary}
+
+\begin{DndTable}[header=PlutoSDR at a Glance, color=PhbLightGreen]{lX}
+  \textbf{Specification} & \textbf{Value} \\
+  \hline
+  RF IC & AD9361 Agile Transceiver \\
+  Frequency Range & 325 MHz - 3.8 GHz (70 MHz - 6 GHz extended) \\
+  Channels & 1T1R (expandable to 2T2R) \\
+  Sample Rate & 2.083 - 61.44 MSPS \\
+  Bandwidth & 200 kHz - 56 MHz \\
+  Interface & USB 2.0 (480 Mbps) \\
+  Sustained Rate & ~4 MSPS full duplex \\
+  Processor & Zynq Z-7010 (Dual ARM + FPGA) \\
+  Memory & 512 MB DDR3 \\
+  Connectors & 2× SMA (RX/TX) \\
+  Power & 5V USB, 2W typical \\
+\end{DndTable}

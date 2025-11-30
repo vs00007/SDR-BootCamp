@@ -1,0 +1,159 @@
+\chapter{Pluto Architecture}
+\ChapterCredits{
+  Mihir Divyansh E,
+  Vemula Siddhartha
+}
+
+\section{Hardware Transmit and Receive Signal Paths}
+
+Figure~\ref{fig:plutofe} illustrates the complete RF front-end signal chain of the PlutoSDR, from digital baseband samples to the RF antenna interface and vice versa. This section describes the end-to-end transmit (TX) and receive (RX) paths at the hardware level.
+
+\begin{figure*}[h]
+  \centering
+  \includesvg[width=0.95\linewidth]{figs/plutofe.svg}
+  \caption{PlutoSDR RF front-end architecture}
+  \label{fig:plutofe}
+\end{figure*}
+
+\subsection{Transmit Signal Path (Baseband Buffer to Antenna)}
+
+The transmit signal path begins with complex baseband samples generated either on the host computer (e.g., MATLAB, GNU Radio) or internally within the PlutoSDR processing system. These samples are transferred to the PlutoSDR over USB and written into transmit buffers managed by the Zynq processing system.
+
+From this point onward, the signal path is entirely hardware-driven.
+
+\paragraph{Digital Baseband Interface}
+Baseband samples are delivered to the AD9361 transceiver via a dedicated digital interface between the Zynq programmable logic and the transceiver. The samples are represented as interleaved, signed 12-bit I/Q values at the selected baseband sample rate.
+
+\paragraph{Digital Interpolation and Filtering}
+Inside the AD9361, the baseband samples pass through a configurable digital interpolation chain. This stage performs:
+\begin{itemize}
+  \item Sample rate conversion to match the RF front-end clocking
+  \item Digital low-pass filtering to shape the transmitted spectrum
+\end{itemize}
+
+The interpolation factor is automatically configured based on the requested baseband sample rate and RF bandwidth.
+
+\paragraph{Digital-to-Analog Conversion}
+The filtered digital samples are converted into analog I and Q waveforms using 12-bit DACs. These DACs operate at a much higher internal clock rate than the input baseband sample rate, as set by the interpolation stages.
+
+\paragraph{Analog Baseband and RF Upconversion}
+The analog I/Q signals pass through baseband reconstruction filters and programmable gain/attenuation stages before entering the quadrature RF mixer. The mixer performs upconversion using the on-chip local oscillator (LO), translating the baseband signal to the configured RF center frequency.
+
+\paragraph{RF Output Chain}
+After upconversion, the RF signal passes through:
+\begin{itemize}
+  \item Programmable RF attenuators
+  \item On-chip RF filters
+  \item A low-power RF driver amplifier
+\end{itemize}
+
+The final RF signal is routed to the transmit SMA connector. The maximum achievable output power is limited by the on-chip RF driver stage and is typically on the order of a few (5-7) dBm into a 50~\(\Omega\) load.
+
+\subsection{Receive Signal Path (Antenna to Baseband Buffer)}
+
+The receive signal path mirrors the transmit chain in reverse order, beginning at the RF input connector and ending with digital baseband samples delivered to memory buffers in the processing system.
+
+\paragraph{RF Input and Front-End Conditioning}
+Incoming RF signals enter through the RX SMA connector and are first passed through on-chip RF filters and programmable gain stages. These stages provide coarse gain control and out-of-band interference rejection.
+
+\paragraph{RF Downconversion}
+The conditioned RF signal is mixed with a locally generated LO inside the AD9361, converting the signal from the RF center frequency down to complex baseband. The I and Q components are produced by a quadrature mixer.
+
+\paragraph{Analog Baseband Filtering and Gain Control}
+The downconverted I and Q signals pass through analog low-pass filters and variable gain amplifiers. These stages determine the effective noise figure and dynamic range of the receiver and are configured automatically or manually depending on the selected gain mode (manual or AGC).
+
+\paragraph{Analog-to-Digital Conversion}
+The analog baseband signals are sampled by 12-bit ADCs at high internal clock rates. The ADC output represents the digitized I/Q baseband signal prior to any decimation.
+
+\paragraph{Digital Decimation and Filtering}
+The digitized samples pass through a digital decimation chain inside the AD9361, which:
+\begin{itemize}
+  \item Reduces the sample rate to the user-configured baseband rate
+  \item Applies digital low-pass filtering to limit noise and aliasing
+\end{itemize}
+
+As with transmission, the decimation factor is automatically determined by the selected baseband sample rate and RF bandwidth.
+
+\paragraph{Baseband Data Delivery}
+The final complex baseband samples are streamed from the AD9361 to the Zynq processing system and stored in receive buffers. 
+
+\subsection{Notes on Symmetry and Shared Resources}
+
+The transmit and receive chains share several common resources within the AD9361, including:
+\begin{itemize}
+  \item Local oscillator generation and frequency synthesis
+  \item Clocking infrastructure
+  \item Digital filter configurations
+\end{itemize}
+
+As a result, changes to parameters such as sample rate, RF bandwidth, or LO frequency can affect both TX and RX behavior, even when only one direction is actively used.
+
+\begin{DndReadAloud}
+  Understanding the hardware signal path is essential for diagnosing practical issues. Many apparent ``software problems'' originate from misconfigured hardware stages within the transmit or receive chains. Along with this, this understanding is important for realising practicality of any undertaking. 
+\end{DndReadAloud}
+
+
+\subsection{Dual Transmit and Receive Channel Operation}
+
+The AD9361 transceiver used in the PlutoSDR internally supports two independent transmit (TX1, TX2) and two independent receive (RX1, RX2) signal chains. These channels are structurally symmetric and largely identical in terms of analog, mixed-signal, and digital processing blocks, as illustrated in Fig.~\ref{fig:plutofe}. However, in the stock PlutoSDR configuration, only one transmit and one receive channel are routed to external RF connectors.
+The 2 TX paths have common clocking, and control, which ensure coherent operation, similar with 2RX
+
+\paragraph{Practical Implications}
+Although the AD9361 supports true 2T2R operation, enabling both channels simultaneously increases internal data throughput and places additional load on downstream data movement and buffering mechanisms. Furthermore, shared RF resources such as synthesizers and calibration engines mean that configuration changes to one channel can have side effects on the other.
+
+
+\section{Exercises}
+
+The questions are supposed to help you understand the architecture better, so you can make better sense of why something happens. They are not designed to have short or purely factual answers. Instead, you are encouraged to reason through the signal path, identify relevant hardware blocks, and—where possible—validate their conclusions experimentally.
+
+\subsection*{Signal Path Awareness}
+
+\begin{enumerate}
+  \item For each of the following configuration parameters, identify the earliest hardware block at which the change takes effect. Refer to Fig \ref{fig:plutofe}
+  \begin{itemize}
+    \item Baseband sample rate
+    \item RF bandwidth
+    \item TX gain / attenuation
+    \item RX gain (manual versus AGC)
+  \end{itemize}
+
+  \item A baseband waveform is transmitted at 1~MSPS and then retransmitted at 2~MSPS while keeping the RF bandwidth constant. Which internal stages must reconfigure, and what changes would you expect to observe at the RF output?
+\end{enumerate}
+
+\subsection*{Shared Resources}
+
+\begin{enumerate}
+  \setcounter{enumi}{2}
+  \item If the TX center frequency is suddenly changed while operating in RX-only mode, what do you expect to see on the RX side?
+
+  \item While receiving a continuous signal, the RX bandwidth is modified. Which internal blocks are affected by this change, and how would this affect the received signal? Think about before the switch, around the switch, and after the switch. If possible, draw crude waveforms (time domain i/q, spectrum), by studying the datasheet in \cite{AD9361_UG570}
+\end{enumerate}
+
+\subsection*{Dual-Channel Operation}
+
+\begin{enumerate}
+  \setcounter{enumi}{4}
+  \item The two transmit chains share a common clock and local oscillator. List experiments that benefit from this coherence. For each experiment, identify which hardware block(s) would reveal loss of coherence first.
+\end{enumerate}
+
+\subsection*{Debugging and Fault Localization}
+
+\begin{enumerate}
+  \setcounter{enumi}{5}
+  \item Unexpected spectral images are observed at the RF output. List three plausible causes and identify whether each originates in the digital baseband, analog baseband, or RF stages.
+
+  \item A received signal becomes distorted only when RX gain is adjusted rapidly. Is this issue more likely rooted in RF hardware behavior, digital signal processing, or software interaction? Justify your reasoning.
+\end{enumerate}
+
+\subsection*{Architectural Limits}
+
+\begin{enumerate}
+  \setcounter{enumi}{8}
+  \item Consider an application that requires transmit and receive samples to be aligned within 1~\(\mu\)s. Which aspects of the PlutoSDR architecture impose the strongest limitations on achieving this requirement? How do you propose you can circumvent this by the custom C library method? Design a software architecture, to achieve this on zynq
+
+  \item You are allowed to modify only one layer of the system (host software, processing system software, programmable logic, or RF configuration). Which layer would you choose to most effectively reduce latency, and which to improve determinism? Explain your choices.
+\end{enumerate}
+
+\begin{DndReadAloud}
+  If thou cannot clearly identify wh're a signal is delayed, filtered, or re-timed, thou art not eft to command it.
+\end{DndReadAloud}

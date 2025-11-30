@@ -1,0 +1,231 @@
+\chapter{Exercises for Digital Comms}
+
+\ChapterCredits{
+    Mihir Divyansh,
+    Vemula Siddhartha
+}
+
+\section{Programming Exercises}
+
+
+\subsection{Foundational Implementations}
+
+\begin{enumerate}
+\item \textbf{Frequency Offset Estimation and Correction}
+
+Implement a frequency offset estimator and compensator for a complex baseband signal.
+
+\begin{itemize}
+\item Inject a known carrier frequency offset into a transmitted signal.
+\item Estimate the offset using at least one method (FFT / Autocorr based)
+\item Apply frequency correction and verify that constellation rotation is removed.
+\item Measure the maximum CFO (as a fraction of symbol rate) for which your estimator remains accurate.
+\end{itemize}
+
+\item \textbf{Symbol Timing Detection}
+
+Implement a basic symbol timing recovery mechanism without using built-in synchronization blocks.
+
+\begin{itemize}
+\item Evaluate at least one of the following approaches:
+  \begin{itemize}
+    \item Early--late gate
+    \item Derivative or zero-crossing-based timing
+  \end{itemize}
+\item Visualize the eye diagram before and after timing correction.
+\item Quantify timing error variance before and after convergence.
+\end{itemize}
+
+\item \textbf{Frame Detection via Correlation}
+
+Implement a frame detector using correlation with a known preamble.
+
+\begin{itemize}
+\item Plot the correlation magnitude over time.
+\item Identify false alarm and miss detection cases.
+\item Measure detection delay relative to the first transmitted data symbol.
+\end{itemize}
+
+\item \textbf{Noise and SNR Estimation}
+
+Develop an estimator for noise variance and SNR from received samples.
+
+\begin{itemize}
+\item Compare estimation accuracy for:
+  \begin{itemize}
+    \item Known pilot symbols
+    \item Blind estimation using decision errors
+  \end{itemize}
+\item Quantify estimation bias at low SNR.
+\end{itemize}
+
+\end{enumerate}
+
+\subsection{PSK}
+
+\begin{enumerate}
+\item \textbf{Carrier Recovery Under Dynamic Conditions}
+
+Implement a QPSK receiver in which the carrier frequency offset (CFO) changes linearly over time (simulating oscillator drift).
+
+\begin{itemize}
+\item Design a tracking loop capable of following time$-$varying CFO rather than assuming a constant offset.
+\item Compare the BER performance of this adaptive approach against a one$-$time coarse CFO correction.
+\item At what rate of CFO change (Hz/s) does your tracking loop fail to converge?
+\end{itemize}
+
+\item \textbf{Frame Synchronization Trade$-$offs}
+
+The text mentions Barker sequences for frame detection. Implement and compare the following preamble strategies:
+
+\begin{itemize}
+\item A Barker$-$11 sequence
+\item A Zadoff$-$$-$Chu sequence of length 13
+\item A repeated m$-$sequence of length 7 (transmitted twice)
+\end{itemize}
+
+For each preamble, measure:
+\begin{itemize}
+\item Probability of false detection under AWGN
+\item Timing accuracy of the detected correlation peak
+\item Performance degradation in the presence of uncorrected CFO
+\end{itemize}
+
+Which preamble would you choose for:
+\begin{itemize}
+\item A low$-$SNR channel?
+\item A high$-$mobility (high Doppler) scenario?
+\end{itemize}
+\end{enumerate}
+
+\subsection{OFDM }
+
+\begin{enumerate}
+\setcounter{enumi}{2}
+
+\item \textbf{Pilot Pattern Design and Channel Estimation}
+
+Implement three pilot insertion strategies in an OFDM system:
+
+\begin{itemize}
+\item Block$-$type: all subcarriers in selected OFDM symbols are pilots
+\item Comb$-$type: every $N$th subcarrier in every symbol is a pilot
+\item Scattered: pilots distributed across both time and frequency
+\end{itemize}
+
+Develop a channel estimation algorithm for each scheme. Test over a frequency$-$selective Rayleigh fading channel.
+
+\begin{itemize}
+\item Which pilot pattern yields the lowest BER?
+\item Which is most robust to Doppler spread?
+\end{itemize}
+
+\item \textbf{PAPR Reduction Techniques}
+
+OFDM exhibits high peak$-$to$-$average power ratio (PAPR), which may cause nonlinear distortion in the PlutoSDR transmit chain.
+
+\begin{itemize}
+\item Implement clipping$-$and$-$filtering for PAPR reduction.
+\item Implement selective mapping (SLM): generate multiple phase$-$rotated OFDM symbols and transmit the one with the lowest PAPR.
+\item Measure PAPR reduction and quantify out$-$of$-$band spectral regrowth.
+\item Transmit both high$-$PAPR and PAPR$-$reduced OFDM signals at maximum TX gain. Can you observe nonlinear distortion in a loopback experiment?
+\end{itemize}
+
+\item \textbf{Subcarrier Nulling and Spectral Shaping}
+
+Implement an OFDM transmission function that supports arbitrary spectral masks:
+
+\begin{lstlisting}[language=Matlab]
+function txFrame = ofdm_shaped_transmit(data, maskVector)
+% maskVector: length N_subcarriers, values 0 (null) or 1 (active)
+\end{lstlisting}
+
+\begin{itemize}
+\item Design a mask that nulls the center 20\% of subcarriers (creating a notch).
+\item Implement power loading based on estimated channel gains. (for a static channel)
+\item Verify that the transmitted spectrum respects the mask using \textbf{loopback} measurements.
+\item Does subcarrier nulling affect PAPR and BER?
+\end{itemize}
+
+\item \textbf{Synchronization Failure Analysis}
+
+Intentionally break the OFDM synchronization chain:
+
+\begin{itemize}
+\item Remove the cyclic prefix (CP) at the receiver only.
+\item Introduce a timing offset of exactly $N/2$ samples (where $N$ is the FFT size).
+\item Introduce a carrier offset equal to one subcarrier spacing.
+\end{itemize}
+
+For each case:
+\begin{itemize}
+\item Plot the received constellation.
+\item Explain \emph{why} it appears as observed.
+\item Identify which failure mode is easiest to detect automatically.
+\end{itemize}
+
+Design a diagnostic function that determines which synchronization stage has failed based only on corrupted received symbols.
+
+\end{enumerate}
+
+\subsection{Theory and Analysis Questions}
+
+\begin{enumerate}
+\setcounter{enumi}{6}
+
+\item \textbf{Gray Coding and Bit Error Propagation}
+
+The text claims that Gray coding ``ensures robustness,'' which is imprecise.
+
+\begin{itemize}
+\item Does Gray coding reduce symbol error rate, or only bit error rate for a given symbol error?
+\item For 16$-$PSK, compare Gray coding and natural binary coding at high SNR. Calculate the average number of bit errors per symbol error.
+\item Construct a scenario in which Gray coding increases BER (hint: non$-$AWGN channels or iterative decoding).
+\end{itemize}
+
+\item \textbf{RRC Filter Cascade and ISI}
+
+Transmit and receive RRC filters combine to form a Raised Cosine response.
+
+\begin{itemize}
+\item If the transmitter uses an RRC filter with roll$-$off $\alpha=0.5$ and the receiver mistakenly uses $\alpha=0.35$, derive or simulate the combined impulse response. What happens to ISI?
+\item Given the PlutoSDR's finite TX bandwidth, at what symbol rate does RRC spectral clipping begin? How does this affect the eye diagram?
+\item Propose a loopback$-$based experimental method to verify correct RRC filter implementation.
+\end{itemize}
+
+\item \textbf{OFDM Orthogonality Under Hardware Impairments}
+
+Real OFDM systems experience:
+
+\begin{itemize}
+\item Phase noise
+\item I/Q imbalance
+\item Timing jitter
+\item Power amplifier nonlinearity
+\end{itemize}
+
+For each impairment, determine whether it primarily causes:
+
+\begin{itemize}
+\item Common phase error (CPE)
+\item Inter$-$carrier interference (ICI)
+\item In$-$band noise floor elevation
+\item Constellation asymmetry or warping
+\end{itemize}
+
+Design an experiment using the PlutoSDR to measure and isolate these effects.
+
+\item \textbf{Cyclic Prefix Length Selection}
+
+\begin{itemize}
+\item What is the impact of excessively long CP on spectral efficiency and SNR?
+\item If the CP is too short by exactly three samples, derive the resulting residual ISI.
+\item Estimate a reasonable CP length for an indoor environment at 2.4~GHz. How does this change for an outdoor urban scenario at 900~MHz?
+\item Can variable USB latency affect the required CP length? Why or why not?
+\end{itemize}
+
+\end{enumerate}
+
+\begin{DndReadAloud}
+If thee can implementeth it but can't explain why it hath broken, thee has't only copied, not understood.
+\end{DndReadAloud}
